@@ -1,13 +1,21 @@
 [package]
 name = "solar-system-navigator"
-version = "0.1.0"
-edition = "2021"
+version = "1.0.0"
+edition = "2024"
+rust-version = "1.89"
+description = "3D orbital simulation and trajectory planning for the solar system"
+license = "MIT OR Apache-2.0"
 
 [dependencies]
-bevy = { version = "0.12.0", features = ["webgl2"] }
+bevy = { version = "0.18", features = ["3d"] }
+serde = { version = "1", features = ["derive"] }
+toml = "0.9"
 
-# We can remove these since Bevy will handle the web functionality
-# console_error_panic_hook = "0.1.7"
-# vec2 = "0.2.1"
-# wasm-bindgen = "0.2.100"
-# web-sys = { version = "0.3.77", features = ["Window", "Document", "HtmlElement", "Text"] }
+[dev-dependencies]
+approx = "0.5"
+
+[profile.dev]
+opt-level = 1
+
+[profile.dev.package."*"]
+opt-level = 3
