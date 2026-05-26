@@ -46,15 +46,15 @@ A **3D** Rust application for visualizing and experimenting with celestial traje
 ```bash
 git clone https://github.com/djmango/solar-system-navigator.git
 cd solar-system-navigator
-chmod +x scripts/fetch_textures.sh scripts/build-release.sh
-./scripts/fetch_textures.sh    # required once (JPEG/PNG maps are not in git)
-cargo run --release
+cargo run --release   # first build auto-downloads planet textures (~8K JPEGs)
 ```
+
+Textures are gitignored; `build.rs` runs `scripts/fetch_textures.sh` when they are missing. Override with `SOLAR_TEXTURE_RES=2k` (faster) or `SOLAR_SKIP_TEXTURE_FETCH=1` (offline, color fallback only).
 
 Release bundle (binary + `assets/`):
 
 ```bash
-./scripts/build-release.sh
+./scripts/build-release.sh   # fetch + build + copy assets into dist/
 cd dist/solar-system-navigator && ./solar-system-navigator
 ```
 

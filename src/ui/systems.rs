@@ -77,9 +77,33 @@ pub fn spawn_ui(mut commands: Commands) {
                     16.0,
                     18.0,
                 );
-                spawn_slider(row, "Vel X: 0", SliderType::VelX, 0.0, -40_000.0, 40_000.0, 90.0);
-                spawn_slider(row, "Vel Y: 0", SliderType::VelY, 0.0, -40_000.0, 40_000.0, 90.0);
-                spawn_slider(row, "Vel Z: 0", SliderType::VelZ, 0.0, -40_000.0, 40_000.0, 90.0);
+                spawn_slider(
+                    row,
+                    "Vel X: 0",
+                    SliderType::VelX,
+                    0.0,
+                    -40_000.0,
+                    40_000.0,
+                    90.0,
+                );
+                spawn_slider(
+                    row,
+                    "Vel Y: 0",
+                    SliderType::VelY,
+                    0.0,
+                    -40_000.0,
+                    40_000.0,
+                    90.0,
+                );
+                spawn_slider(
+                    row,
+                    "Vel Z: 0",
+                    SliderType::VelZ,
+                    0.0,
+                    -40_000.0,
+                    40_000.0,
+                    90.0,
+                );
             });
 
             root.spawn((

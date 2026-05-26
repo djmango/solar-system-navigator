@@ -5,17 +5,9 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
-RES="${SOLAR_TEXTURE_RES:-8k}"
-export SOLAR_TEXTURE_RES="$RES"
+export SOLAR_TEXTURE_RES="${SOLAR_TEXTURE_RES:-8k}"
 
-if [ ! -f assets/textures/earth.jpg ]; then
-  echo "Downloading planet textures ($RES)..."
-  ./scripts/fetch_textures.sh
-else
-  echo "Textures already present in assets/textures/ (set SOLAR_TEXTURE_RES to re-fetch)."
-fi
-
-echo "Building release binary..."
+echo "Building release binary (textures auto-fetch via build.rs if needed)..."
 cargo build --release
 
 OUT="$ROOT/dist/solar-system-navigator"
