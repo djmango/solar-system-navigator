@@ -8,8 +8,9 @@ mkdir -p artifacts
 
 cargo build --release
 
+DURATION="${SOLAR_DEMO_SECONDS:-22}"
 export SOLAR_DEMO_RECORD=1
-export SOLAR_DEMO_FRAMES=900
+export SOLAR_DEMO_SECONDS="${DURATION}"
 
 ./target/release/solar-system-navigator &
 APP_PID=$!
@@ -19,7 +20,7 @@ cleanup() {
 }
 trap cleanup EXIT
 
-sleep 6
+sleep 8
 
 ffmpeg -y \
   -f x11grab \
@@ -27,8 +28,8 @@ ffmpeg -y \
   -video_size 1280x720 \
   -framerate 30 \
   -i "${DISPLAY}" \
-  -t 20 \
+  -t "${DURATION}" \
   -crf 18 \
   artifacts/demo.mp4
 
-echo "Wrote artifacts/demo.mp4"
+echo "Wrote artifacts/demo.mp4 (${DURATION}s)"

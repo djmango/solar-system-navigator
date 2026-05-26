@@ -45,3 +45,7 @@ impl OrbitTrail {
 
 #[derive(Component)]
 pub struct SelectedBody;
+
+/// Display radius used to restore scale when selection changes.
+#[derive(Component, Clone, Copy)]
+pub struct VisualRadius(pub f32);

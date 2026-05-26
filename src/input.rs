@@ -58,6 +58,7 @@ pub fn keyboard_controls(
 fn switch_scenario(active: &mut ActiveScenario, catalog: &ScenarioCatalog, index: usize) {
     if let Some(entry) = catalog.entries.get(index) {
         active.file_path = entry.path.clone();
+        active.name = entry.label.clone();
     }
 }
 
@@ -71,8 +72,13 @@ fn cycle_selection(
     }
     let names: Vec<_> = bodies
         .iter()
-        .map(|(b, _)| b.name.clone())
-        .filter(|n| !n.contains("Probe"))
+        .filter_map(|(b, _)| {
+            if b.name.contains("Probe") {
+                None
+            } else {
+                Some(b.name.clone())
+            }
+        })
         .collect();
     if names.is_empty() {
         return;
@@ -83,10 +89,7 @@ fn cycle_selection(
     } else {
         names[0].clone()
     };
-    editor.selected_name = Some(next.clone());
-    if let Some((_, vel)) = bodies.iter().find(|(b, _)| b.name == next) {
-        editor.velocity_x = vel.0.x;
-        editor.velocity_y = vel.0.y;
-        editor.velocity_z = vel.0.z;
-    }
+    editor.selected_name = Some(next);
+    editor.selection_changed = true;
+    editor.velocity_dirty = false;
 }
