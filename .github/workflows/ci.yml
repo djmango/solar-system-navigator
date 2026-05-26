@@ -57,5 +57,7 @@ jobs:
         with:
           toolchain: 1.89
       - uses: Swatinem/rust-cache@v2
+      - name: Fetch 2K textures (smoke test JPEG/PNG loading)
+        run: SOLAR_TEXTURE_RES=2k ./scripts/fetch_textures.sh
       - name: cargo build --release
         run: cargo build --release

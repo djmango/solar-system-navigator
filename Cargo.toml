@@ -7,7 +7,7 @@ description = "3D orbital simulation and trajectory planning for the solar syste
 license = "MIT OR Apache-2.0"
 
 [dependencies]
-bevy = { version = "0.18", features = ["3d"] }
+bevy = { version = "0.18", features = ["3d", "jpeg", "png"] }
 serde = { version = "1", features = ["derive"] }
 toml = "0.9"
 

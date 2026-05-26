@@ -46,7 +46,16 @@ A **3D** Rust application for visualizing and experimenting with celestial traje
 ```bash
 git clone https://github.com/djmango/solar-system-navigator.git
 cd solar-system-navigator
+chmod +x scripts/fetch_textures.sh scripts/build-release.sh
+./scripts/fetch_textures.sh    # required once (JPEG/PNG maps are not in git)
 cargo run --release
+```
+
+Release bundle (binary + `assets/`):
+
+```bash
+./scripts/build-release.sh
+cd dist/solar-system-navigator && ./solar-system-navigator
 ```
 
 ## Project layout
