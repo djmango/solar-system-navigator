@@ -1,6 +1,9 @@
 use bevy::input::mouse::{MouseMotion, MouseWheel};
 use bevy::prelude::*;
 
+use crate::components::{CelestialBody, Position};
+use crate::resources::EditorState;
+
 #[derive(Component)]
 pub struct OrbitCamera {
     pub focus: Vec3,
@@ -26,11 +29,7 @@ impl Default for OrbitCamera {
 
 pub fn spawn_camera(mut commands: Commands) {
     let orbit = OrbitCamera::default();
-    commands.spawn((
-        Camera3d::default(),
-        orbit_camera_transform(&orbit),
-        orbit,
-    ));
+    commands.spawn((Camera3d::default(), orbit_camera_transform(&orbit), orbit));
 }
 
 fn orbit_camera_transform(orbit: &OrbitCamera) -> Transform {
@@ -57,6 +56,26 @@ pub fn demo_orbit_camera(
     };
     orbit.yaw += time.delta_secs() * 0.2;
     orbit.pitch = 0.35 + (time.elapsed_secs() * 0.05).sin() * 0.08;
+}
+
+pub fn focus_camera_on_selection(
+    editor: Res<EditorState>,
+    bodies: Query<(&CelestialBody, &Position)>,
+    mut cameras: Query<&mut OrbitCamera, With<Camera3d>>,
+    time: Res<Time>,
+) {
+    let Ok(mut orbit) = cameras.single_mut() else {
+        return;
+    };
+    let Some(name) = &editor.selected_name else {
+        return;
+    };
+    let Some((_, position)) = bodies.iter().find(|(b, _)| &b.name == name) else {
+        return;
+    };
+    let target = position.0;
+    let t = (time.delta_secs() * 2.0).clamp(0.0, 1.0);
+    orbit.focus = orbit.focus.lerp(target, t);
 }
 
 pub fn orbit_camera_system(

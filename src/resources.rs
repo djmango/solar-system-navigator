@@ -58,6 +58,10 @@ pub struct EditorState {
     pub velocity_y: f32,
     pub velocity_z: f32,
     pub probe_delta_v: f32,
+    /// When true, slider edits are pushed to the selected body's velocity.
+    pub velocity_dirty: bool,
+    /// When true, selection just changed — sync sliders from body once.
+    pub selection_changed: bool,
 }
 
 #[derive(Resource, Debug, Clone)]
@@ -94,9 +98,13 @@ impl Default for ScenarioCatalog {
 
 #[derive(Resource, Debug)]
 pub struct DemoRecorder {
-    pub max_frames: u32,
-    #[allow(dead_code)]
-    pub output_dir: String,
+    /// How long the app runs before exiting in demo mode (seconds).
+    pub duration_secs: f32,
+}
+
+#[derive(Resource)]
+pub struct WorldAssets {
+    pub sphere_mesh: Handle<Mesh>,
 }
 
 #[derive(Message)]
@@ -110,14 +118,10 @@ impl DemoRecorder {
         if std::env::var("SOLAR_DEMO_RECORD").ok().as_deref() != Some("1") {
             return None;
         }
-        let max_frames = std::env::var("SOLAR_DEMO_FRAMES")
+        let duration_secs = std::env::var("SOLAR_DEMO_SECONDS")
             .ok()
             .and_then(|v| v.parse().ok())
-            .unwrap_or(450);
-        let output_dir = std::env::var("SOLAR_DEMO_DIR").unwrap_or_else(|_| "artifacts/frames".to_string());
-        Some(Self {
-            max_frames,
-            output_dir,
-        })
+            .unwrap_or(20.0);
+        Some(Self { duration_secs })
     }
 }

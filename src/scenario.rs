@@ -51,7 +51,8 @@ impl BodyDef {
 
 pub fn load_scenario(path: impl AsRef<Path>) -> Result<Scenario, String> {
     let path = path.as_ref();
-    let contents = fs::read_to_string(path).map_err(|e| format!("Failed to read {}: {e}", path.display()))?;
+    let contents =
+        fs::read_to_string(path).map_err(|e| format!("Failed to read {}: {e}", path.display()))?;
     toml::from_str(&contents).map_err(|e| format!("Failed to parse {}: {e}", path.display()))
 }
 

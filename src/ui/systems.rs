@@ -1,9 +1,7 @@
 use bevy::input::mouse::MouseButton;
 use bevy::prelude::*;
 
-use crate::resources::{
-    ActiveScenario, EditorState, SimulationControl, SimulationDiagnostics,
-};
+use crate::resources::{ActiveScenario, EditorState, SimulationControl, SimulationDiagnostics};
 use crate::ui::components::{
     DiagnosticsText, HelpText, HudRoot, Slider, SliderHandle, SliderType, ValueText,
 };
@@ -147,10 +145,7 @@ pub fn update_hud_text(
     let Ok(mut text) = diag_text.single_mut() else {
         return;
     };
-    let selected = editor
-        .selected_name
-        .as_deref()
-        .unwrap_or("(none)");
+    let selected = editor.selected_name.as_deref().unwrap_or("(none)");
     **text = format!(
         "Scenario: {} | Speed: {:.1}x | Substeps: {} | Paused: {} | Bodies: {} | E_total: {:.2} (KE {:.2} + PE {:.2}) | Selected: {} | Probe Δv: {:.1}",
         active.name,
@@ -204,8 +199,8 @@ pub fn ui_system(
         for (entity, interaction, transform, slider_type, mut slider, mut background_color) in
             &mut sliders
         {
-            let is_active = active_entity == Some(entity)
-                && mouse_button.pressed(MouseButton::Left);
+            let is_active =
+                active_entity == Some(entity) && mouse_button.pressed(MouseButton::Left);
             if is_active && let Some(cursor_pos) = cursor_position {
                 let node_position = transform.translation().truncate();
                 let start_x = node_position.x - slider_width / 2.0;
@@ -265,9 +260,18 @@ pub fn ui_system(
             SliderType::TicksPerFrame => {
                 simulation_control.ticks_per_frame = value as u32;
             }
-            SliderType::VelX => editor.velocity_x = value,
-            SliderType::VelY => editor.velocity_y = value,
-            SliderType::VelZ => editor.velocity_z = value,
+            SliderType::VelX => {
+                editor.velocity_x = value;
+                editor.velocity_dirty = true;
+            }
+            SliderType::VelY => {
+                editor.velocity_y = value;
+                editor.velocity_dirty = true;
+            }
+            SliderType::VelZ => {
+                editor.velocity_z = value;
+                editor.velocity_dirty = true;
+            }
         }
 
         for (mut text, text_slider_type) in &mut value_texts {

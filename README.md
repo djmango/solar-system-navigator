@@ -59,9 +59,10 @@ On Linux with Xvfb and ffmpeg:
 
 ```bash
 xvfb-run -a ./scripts/record_demo.sh
+# optional: SOLAR_DEMO_SECONDS=25 xvfb-run -a ./scripts/record_demo.sh
 ```
 
-Output: `artifacts/demo.mp4`
+Output: `artifacts/demo.mp4` (duration matches `SOLAR_DEMO_SECONDS`, default 22s)
 
 ## License
 

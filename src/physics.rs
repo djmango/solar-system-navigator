@@ -12,8 +12,10 @@ pub struct BodyState {
 }
 
 /// Gravitational acceleration on `target` from all `bodies` (Plummer softening).
+/// Skips the body at `skip_index` so a body does not attract itself.
 pub fn gravitational_acceleration(
     target: Vec3,
+    skip_index: Option<usize>,
     bodies: &[BodyState],
     g: f32,
     softening: f32,
@@ -21,7 +23,10 @@ pub fn gravitational_acceleration(
     let softening_sq = softening * softening;
     let mut acceleration = Vec3::ZERO;
 
-    for body in bodies {
+    for (index, body) in bodies.iter().enumerate() {
+        if skip_index == Some(index) {
+            continue;
+        }
         let delta = body.position - target;
         let dist_sq = delta.length_squared() + softening_sq;
         let dist = dist_sq.sqrt();
@@ -91,12 +96,13 @@ pub fn orbital_physics(
         diagnostics.total_energy = ke + pe;
 
         let mut accelerations = Vec::with_capacity(snapshot.len());
-        for state in &snapshot {
+        for (index, state) in snapshot.iter().enumerate() {
             let accel = if state.fixed {
                 Vec3::ZERO
             } else {
                 gravitational_acceleration(
                     state.position,
+                    Some(index),
                     &snapshot,
                     physics.g,
                     physics.softening,
@@ -105,16 +111,59 @@ pub fn orbital_physics(
             accelerations.push(accel);
         }
 
-        for ((_, mut pos, mut vel, mut transform, mut trail, fixed), accel) in
-            bodies.iter_mut().zip(accelerations)
+        // Velocity Verlet: recompute acceleration at the new position.
+        let mut new_positions: Vec<Vec3> = Vec::with_capacity(snapshot.len());
+        let mut new_velocities: Vec<Vec3> = Vec::with_capacity(snapshot.len());
+
+        for (index, state) in snapshot.iter().enumerate() {
+            if state.fixed {
+                new_positions.push(state.position);
+                new_velocities.push(state.velocity);
+                continue;
+            }
+            let half_dt = dt_base * 0.5;
+            let v_half = state.velocity + accelerations[index] * half_dt;
+            let pos_new = state.position + v_half * dt_base;
+            new_positions.push(pos_new);
+            new_velocities.push(v_half);
+        }
+
+        let new_snapshot: Vec<BodyState> = snapshot
+            .iter()
+            .enumerate()
+            .map(|(i, s)| BodyState {
+                position: new_positions[i],
+                velocity: new_velocities[i],
+                mass: s.mass,
+                fixed: s.fixed,
+            })
+            .collect();
+
+        let mut accelerations_end = Vec::with_capacity(new_snapshot.len());
+        for (index, state) in new_snapshot.iter().enumerate() {
+            let accel = if state.fixed {
+                Vec3::ZERO
+            } else {
+                gravitational_acceleration(
+                    state.position,
+                    Some(index),
+                    &new_snapshot,
+                    physics.g,
+                    physics.softening,
+                )
+            };
+            accelerations_end.push(accel);
+        }
+
+        for (i, (_, mut pos, mut vel, mut transform, mut trail, fixed)) in
+            bodies.iter_mut().enumerate()
         {
             if fixed.is_some() {
                 continue;
             }
             let half_dt = dt_base * 0.5;
-            vel.0 += accel * half_dt;
-            pos.0 += vel.0 * dt_base;
-            vel.0 += accel * half_dt;
+            vel.0 = new_velocities[i] + accelerations_end[i] * half_dt;
+            pos.0 = new_positions[i];
             transform.translation = pos.0;
             trail.push(pos.0);
         }
@@ -134,8 +183,22 @@ mod tests {
             mass: 1000.0,
             fixed: true,
         }];
-        let accel = gravitational_acceleration(Vec3::new(100.0, 0.0, 0.0), &bodies, 1.0, 1.0);
+        let accel = gravitational_acceleration(Vec3::new(100.0, 0.0, 0.0), None, &bodies, 1.0, 1.0);
         assert!(accel.x < 0.0);
+        assert_relative_eq!(accel.y, 0.0, epsilon = 1e-5);
+        assert_relative_eq!(accel.z, 0.0, epsilon = 1e-5);
+    }
+
+    #[test]
+    fn self_interaction_is_zero() {
+        let bodies = [BodyState {
+            position: Vec3::new(50.0, 0.0, 0.0),
+            velocity: Vec3::ZERO,
+            mass: 10.0,
+            fixed: false,
+        }];
+        let accel = gravitational_acceleration(bodies[0].position, Some(0), &bodies, 1.0, 0.0);
+        assert_relative_eq!(accel.x, 0.0, epsilon = 1e-5);
         assert_relative_eq!(accel.y, 0.0, epsilon = 1e-5);
         assert_relative_eq!(accel.z, 0.0, epsilon = 1e-5);
     }
