@@ -120,6 +120,8 @@ pub fn reload_scenario(
 fn sync_editor_from_scenario(editor: &mut EditorState, scenario: &Scenario) {
     editor.velocity_dirty = false;
     editor.selection_changed = true;
+    editor.frame_camera = true;
+    editor.target_frame_radius = 0.0;
     if let Some(first) = scenario.bodies.iter().find(|b| !b.fixed && !b.probe) {
         editor.selected_name = Some(first.name.clone());
         editor.velocity_x = first.velocity[0];

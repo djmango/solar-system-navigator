@@ -1,13 +1,14 @@
 use bevy::prelude::*;
 
+use crate::camera::select_body;
 use crate::components::{CelestialBody, Mass, Position, SoiRadius, Velocity};
 use crate::planner::{
     add_hohmann_maneuver_pair, add_maneuver_node, apply_hohmann_departure_draft,
     build_soi_snapshots, clear_maneuver_nodes, compute_hohmann_for_target, on_simulation_reset,
 };
 use crate::resources::{
-    ActiveScenario, EditorState, MapViewMode, PhysicsConstants, ReloadScenario, RoutePlanner,
-    ScenarioCatalog, SimulationClock, SimulationControl, SpawnProbe,
+    ActiveScenario, EditorState, GameUx, MapViewMode, PhysicsConstants, ReloadScenario,
+    RoutePlanner, ScenarioCatalog, SimulationClock, SimulationControl, SpawnProbe,
 };
 
 pub fn keyboard_controls(
@@ -18,6 +19,7 @@ pub fn keyboard_controls(
     mut planner: ResMut<RoutePlanner>,
     mut clock: ResMut<SimulationClock>,
     mut map_mode: ResMut<MapViewMode>,
+    mut game_ux: ResMut<GameUx>,
     catalog: Res<ScenarioCatalog>,
     mut reload: MessageWriter<ReloadScenario>,
     bodies: Query<(&CelestialBody, &Velocity)>,
@@ -51,6 +53,7 @@ pub fn keyboard_controls(
     }
     if keyboard.just_pressed(KeyCode::KeyV) {
         planner.show_previews = !planner.show_previews;
+        game_ux.show_system_orbits = !game_ux.show_system_orbits;
     }
     if keyboard.just_pressed(KeyCode::KeyO) {
         planner.soi_auto = !planner.soi_auto;
@@ -144,7 +147,5 @@ fn cycle_selection(
     } else {
         names[0].clone()
     };
-    editor.selected_name = Some(next);
-    editor.selection_changed = true;
-    editor.velocity_dirty = false;
+    select_body(editor, &next, true);
 }

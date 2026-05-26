@@ -5,6 +5,7 @@ mod camera;
 mod components;
 mod demo;
 mod input;
+mod interaction;
 mod maneuver;
 mod map_view;
 mod orbit;
@@ -22,14 +23,15 @@ use bevy::prelude::*;
 use camera::{demo_orbit_camera, focus_camera_on_selection, orbit_camera_system, spawn_camera};
 use demo::{demo_auto_exit, demo_scenario_cycler, demo_simulation_tuning};
 use input::keyboard_controls;
+use interaction::{ClickTracker, body_pick_on_click, focus_sun_hotkey, frame_camera_hotkey};
 use maneuver::execute_maneuver_burns;
 use map_view::{draw_orbit_previews, map_mode_camera, toggle_map_mode};
 use physics::orbital_physics;
 use planner::{advance_simulation_clock, sync_route_planner_targets, update_soi_central_body};
 use resources::{
-    ActiveScenario, BodyTextureCache, DemoRecorder, MapViewMode, PhysicsConstants, ReloadScenario,
-    RoutePlanner, ScenarioCatalog, SimulationClock, SimulationControl, SimulationDiagnostics,
-    SpawnProbe,
+    ActiveScenario, BodyTextureCache, CameraInputState, DemoRecorder, GameUx, MapViewMode,
+    PhysicsConstants, ReloadScenario, RoutePlanner, ScenarioCatalog, SimulationClock,
+    SimulationControl, SimulationDiagnostics, SpawnProbe,
 };
 use scenario::{load_scenario, scenario_asset_path};
 use spawn::{
@@ -62,6 +64,9 @@ fn main() {
     .init_resource::<SimulationClock>()
     .init_resource::<RoutePlanner>()
     .init_resource::<MapViewMode>()
+    .init_resource::<GameUx>()
+    .init_resource::<CameraInputState>()
+    .init_resource::<ClickTracker>()
     .init_resource::<BodyTextureCache>()
     .init_resource::<PhysicsConstants>()
     .init_resource::<SimulationDiagnostics>()
@@ -84,11 +89,13 @@ fn main() {
             Update,
             (
                 demo_orbit_camera,
-                focus_camera_on_selection,
                 orbit_camera_system,
+                body_pick_on_click,
+                focus_camera_on_selection,
             )
                 .chain(),
         )
+        .add_systems(Update, (frame_camera_hotkey, focus_sun_hotkey))
         .add_systems(
             Update,
             (

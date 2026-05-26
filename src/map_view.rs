@@ -7,21 +7,34 @@ use crate::camera::OrbitCamera;
 use crate::components::{
     CelestialBody, FixedBody, Mass as BodyMass, Position, Probe, SoiRadius, Velocity,
 };
-use crate::orbit;
+use crate::orbit::{self, RelativeState};
 use crate::planner::{build_soi_snapshots, relative_target_state};
-use crate::resources::{MapViewMode, PhysicsConstants, RoutePlanner, SimulationClock};
+use crate::resources::{
+    ActiveScenario, GameUx, MapViewMode, PhysicsConstants, RoutePlanner, SimulationClock,
+};
+use crate::scenario::BodyDef;
+use crate::soi::SoiBodySnapshot;
 
-const MAP_RADIUS: f32 = 3.0 * AU;
+const MAP_RADIUS: f32 = 3.2 * AU;
 const MAP_PITCH: f32 = std::f32::consts::FRAC_PI_2 - 0.02;
+const SYSTEM_ORBIT_SEGMENTS: usize = 256;
+const TARGET_ORBIT_SEGMENTS: usize = 160;
 
 pub fn toggle_map_mode(
     keyboard: Res<ButtonInput<KeyCode>>,
     mut map_mode: ResMut<MapViewMode>,
     mut planner: ResMut<RoutePlanner>,
+    mut game_ux: ResMut<GameUx>,
 ) {
     if keyboard.just_pressed(KeyCode::KeyM) {
         map_mode.active = !map_mode.active;
         planner.show_previews = map_mode.active || !planner.nodes.is_empty();
+        if map_mode.active {
+            game_ux.show_system_orbits = true;
+        }
+    }
+    if keyboard.just_pressed(KeyCode::Escape) && map_mode.active {
+        map_mode.active = false;
     }
 }
 
@@ -61,8 +74,10 @@ pub fn map_mode_camera(
 pub fn draw_orbit_previews(
     planner: Res<RoutePlanner>,
     map_mode: Res<MapViewMode>,
+    game_ux: Res<GameUx>,
     clock: Res<SimulationClock>,
     physics: Res<PhysicsConstants>,
+    active: Res<ActiveScenario>,
     mut gizmos: Gizmos,
     bodies: Query<(
         &CelestialBody,
@@ -74,7 +89,10 @@ pub fn draw_orbit_previews(
         Option<&Probe>,
     )>,
 ) {
-    if !planner.show_previews && !map_mode.active {
+    let show_system = map_mode.active || game_ux.show_system_orbits;
+    let show_target = planner.show_previews || map_mode.active;
+
+    if !show_system && !show_target {
         return;
     }
 
@@ -97,6 +115,27 @@ pub fn draw_orbit_previews(
     };
     let mu = physics.g * central.mass;
 
+    if show_system {
+        draw_all_system_orbits(
+            &mut gizmos,
+            &snapshots,
+            central,
+            mu,
+            &active.template.bodies,
+            planner.target_body.as_deref(),
+        );
+    }
+
+    if !show_target {
+        if map_mode.active {
+            draw_soi_gizmos(&mut gizmos, &snapshots);
+            if let Some(xfer) = planner.last_hohmann {
+                draw_hohmann_target_orbit(&mut gizmos, mu, central.position, xfer.r2);
+            }
+        }
+        return;
+    }
+
     let target_name = planner.target_body.clone().or_else(|| {
         snapshots
             .iter()
@@ -117,13 +156,19 @@ pub fn draw_orbit_previews(
     };
 
     let color_current = if is_probe {
-        Color::srgba(0.3, 0.95, 1.0, 0.85)
+        Color::srgba(0.3, 0.95, 1.0, 0.95)
     } else {
-        Color::srgba(0.5, 0.85, 1.0, 0.7)
+        Color::srgba(1.0, 1.0, 1.0, 0.95)
     };
 
-    let current_path = orbit::sample_orbit_path(mu, rel, 128);
-    draw_path_inertial(&mut gizmos, &current_path, central.position, color_current);
+    let current_path = orbit::sample_orbit_path(mu, rel, TARGET_ORBIT_SEGMENTS);
+    draw_path_inertial(
+        &mut gizmos,
+        &current_path,
+        central.position,
+        color_current,
+        2.0,
+    );
 
     let node_params: Vec<(f32, f32, f32, f32)> = planner
         .nodes
@@ -140,7 +185,8 @@ pub fn draw_orbit_previews(
             &mut gizmos,
             &predicted,
             central.position,
-            Color::srgba(1.0, 0.55, 0.15, 0.9),
+            Color::srgba(1.0, 0.55, 0.15, 0.95),
+            2.5,
         );
 
         for node in &planner.nodes {
@@ -161,7 +207,44 @@ pub fn draw_orbit_previews(
     }
 }
 
-fn draw_soi_gizmos(gizmos: &mut Gizmos, bodies: &[crate::soi::SoiBodySnapshot]) {
+fn draw_all_system_orbits(
+    gizmos: &mut Gizmos,
+    snapshots: &[SoiBodySnapshot],
+    primary: &SoiBodySnapshot,
+    mu: f32,
+    body_defs: &[BodyDef],
+    highlight: Option<&str>,
+) {
+    for body in snapshots {
+        if body.is_primary {
+            continue;
+        }
+        let rel = RelativeState::new(
+            body.position - primary.position,
+            body.velocity - primary.velocity,
+        );
+        let path = orbit::sample_orbit_path(mu, rel, SYSTEM_ORBIT_SEGMENTS);
+        let base = body_color(body_defs, &body.name);
+        let selected = highlight == Some(body.name.as_str());
+        let color = if selected {
+            Color::srgba(1.0, 1.0, 1.0, 0.95)
+        } else {
+            base.with_alpha(0.45)
+        };
+        let width = if selected { 2.5 } else { 1.0 };
+        draw_path_inertial(gizmos, &path, primary.position, color, width);
+    }
+}
+
+fn body_color(body_defs: &[BodyDef], name: &str) -> Color {
+    body_defs
+        .iter()
+        .find(|b| b.name == name)
+        .map(|b| b.color())
+        .unwrap_or(Color::srgba(0.7, 0.75, 0.85, 1.0))
+}
+
+fn draw_soi_gizmos(gizmos: &mut Gizmos, bodies: &[SoiBodySnapshot]) {
     for body in bodies {
         if body.is_primary || !body.soi_radius.is_finite() || body.soi_radius <= 0.0 {
             continue;
@@ -172,15 +255,21 @@ fn draw_soi_gizmos(gizmos: &mut Gizmos, bodies: &[crate::soi::SoiBodySnapshot]) 
 }
 
 fn draw_hohmann_target_orbit(gizmos: &mut Gizmos, mu: f32, origin: Vec3, radius: f32) {
-    let state = orbit::RelativeState::new(
+    let state = RelativeState::new(
         Vec3::new(radius, 0.0, 0.0),
         Vec3::new(0.0, 0.0, (mu / radius).sqrt()),
     );
     let path = orbit::sample_orbit_path(mu, state, 96);
-    draw_path_inertial(gizmos, &path, origin, Color::srgba(0.85, 0.35, 1.0, 0.55));
+    draw_path_inertial(
+        gizmos,
+        &path,
+        origin,
+        Color::srgba(0.85, 0.35, 1.0, 0.55),
+        1.5,
+    );
 }
 
-fn draw_path_inertial(gizmos: &mut Gizmos, path: &[Vec3], origin: Vec3, color: Color) {
+fn draw_path_inertial(gizmos: &mut Gizmos, path: &[Vec3], origin: Vec3, color: Color, _width: f32) {
     for window in path.windows(2) {
         gizmos.line(origin + window[0], origin + window[1], color);
     }

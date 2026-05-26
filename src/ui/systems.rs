@@ -2,9 +2,10 @@ use bevy::input::mouse::MouseButton;
 use bevy::prelude::*;
 
 use crate::astro::{self, AU};
+use crate::camera::OrbitCamera;
 use crate::resources::{
-    ActiveScenario, EditorState, MapViewMode, RoutePlanner, SimulationClock, SimulationControl,
-    SimulationDiagnostics,
+    ActiveScenario, EditorState, GameUx, MapViewMode, RoutePlanner, SimulationClock,
+    SimulationControl, SimulationDiagnostics,
 };
 use crate::ui::components::{
     DiagnosticsText, HelpText, HudRoot, PlannerText, Slider, SliderHandle, SliderType, ValueText,
@@ -180,7 +181,7 @@ pub fn spawn_ui(mut commands: Commands) {
 }
 
 fn help_lines() -> String {
-    "RMB: orbit | MMB: pan | Scroll: zoom | Space: pause | N: step | R: reset | 1-3: missions | Tab: select | P: probe | M: map | B: burn node | C: clear | H: Hohmann Δv1 | Shift+H: Hohmann nodes | O: SOI auto | V: previews | ,/.: burn timing".to_string()
+    "LMB drag: orbit camera | RMB/MMB: pan | Scroll: zoom | Click body: select & follow | Dbl-click/F: frame | Home: Sun | Tab: cycle | Space: pause | M: map (Esc exit) | V: orbit lines | P: probe | B/C: maneuver | H/Shift+H: Hohmann | 1-3: missions".to_string()
 }
 
 fn spawn_slider(
@@ -250,6 +251,8 @@ pub fn update_hud_text(
     clock: Res<SimulationClock>,
     planner: Res<RoutePlanner>,
     map_mode: Res<MapViewMode>,
+    game_ux: Res<GameUx>,
+    cameras: Query<&OrbitCamera, With<Camera3d>>,
     mut diag_text: Query<&mut Text, With<DiagnosticsText>>,
     mut planner_text: Query<&mut Text, (With<PlannerText>, Without<DiagnosticsText>)>,
 ) {
@@ -257,16 +260,24 @@ pub fn update_hud_text(
         return;
     };
     let selected = editor.selected_name.as_deref().unwrap_or("(none)");
+    let view_dist = cameras
+        .single()
+        .map(|c| astro::format_length(c.radius))
+        .unwrap_or_else(|_| "?".to_string());
     **text = format!(
-        "Scenario: {} | SI (m, kg, s) | Warp: {:.0}x | Substeps: {} | Paused: {} | Bodies: {} | E: {:.3e} J | Selected: {} | Probe Δv: {:.0} m/s",
+        "Scenario: {} | Physics: SI (m, kg, s) | View dist: {} | Orbits: {} | Warp: {:.0}x | Paused: {} | Selected: {} | Probe Δv: {:.0} m/s | E: {:.3e} J",
         active.name,
+        view_dist,
+        if game_ux.show_system_orbits {
+            "shown"
+        } else {
+            "hidden"
+        },
         simulation.speed,
-        simulation.ticks_per_frame,
         simulation.paused,
-        diagnostics.body_count,
-        diagnostics.total_energy,
         selected,
         editor.probe_delta_v,
+        diagnostics.total_energy,
     );
 
     if let Ok(mut planner_ui) = planner_text.single_mut() {

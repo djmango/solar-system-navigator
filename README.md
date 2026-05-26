@@ -20,9 +20,12 @@ A **3D** Rust application for visualizing and experimenting with celestial traje
 
 | Input | Action |
 |-------|--------|
-| Right-drag | Orbit camera |
-| Middle-drag | Pan |
-| Scroll / W/S | Zoom |
+| **Click** a planet | Select and follow with camera |
+| **Double-click** / **F** | Frame selection (fit orbit in view) |
+| **Home** | Focus the Sun |
+| LMB drag | Orbit camera (game-style) |
+| RMB / MMB drag | Pan |
+| Scroll / W / S | Zoom |
 | Space | Pause / resume |
 | N | Advance one step |
 | R | Reload scenario |
@@ -31,15 +34,16 @@ A **3D** Rust application for visualizing and experimenting with celestial traje
 | P | Spawn probe at selection |
 | [ / ] | Decrease / increase probe Δv |
 | +/- | Simulation speed |
-| M | Toggle map mode (top-down system view) |
+| M | Map mode — full heliocentric orbit rings (KSP-style) |
+| Esc | Exit map mode |
 | Q / E | Rotate map view (in map mode) |
-| B | Add maneuver node at current draft Δv |
-| C | Clear maneuver nodes |
-| V | Toggle orbit previews |
+| V | Toggle orbit lines (planets + maneuver previews) |
+| B / C | Add / clear maneuver nodes |
 | O | Toggle automatic SOI central-body switching |
-| H | Compute Hohmann transfer (sets prograde Δv to 1st burn) |
-| Shift+H | Add Hohmann departure + arrival maneuver nodes |
+| H / Shift+H | Hohmann Δv draft / add maneuver pair |
 | , / . | Decrease / increase time until next burn |
+
+Planet positions and velocities use **true SI scale**; mesh sizes use `visual_radius` in TOML so bodies stay visible at orbital distances.
 
 ## Getting started
 

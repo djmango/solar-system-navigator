@@ -34,6 +34,21 @@ pub const DEFAULT_SOFTENING: f32 = 1.0e8;
 /// Default simulation time warp (simulated seconds per real second).
 pub const DEFAULT_TIME_WARP: f32 = 50_000.0;
 
+/// Human-readable distance for HUD (m → km / Mm / AU).
+pub fn format_length(meters: f32) -> String {
+    if meters.is_finite() && meters >= AU {
+        format!("{:.3} AU", meters / AU)
+    } else if meters >= 1.0e9 {
+        format!("{:.2} Gm", meters / 1.0e9)
+    } else if meters >= 1.0e6 {
+        format!("{:.1} Mm", meters / 1.0e6)
+    } else if meters >= 1.0e3 {
+        format!("{:.1} km", meters / 1.0e3)
+    } else {
+        format!("{:.0} m", meters)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

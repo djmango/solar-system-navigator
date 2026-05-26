@@ -124,7 +124,7 @@ impl Default for RoutePlanner {
             default_burn_offset: crate::astro::DAY,
             preview_horizon: crate::astro::YEAR,
             preview_step: 3600.0,
-            show_previews: false,
+            show_previews: true,
             soi_auto: true,
             hohmann_target_radius: crate::astro::AU * 1.524,
             last_hohmann: None,
@@ -143,6 +143,30 @@ pub struct EditorState {
     pub velocity_dirty: bool,
     /// When true, selection just changed — sync sliders from body once.
     pub selection_changed: bool,
+    /// Smoothly zoom the orbit camera toward `target_frame_radius`.
+    pub frame_camera: bool,
+    pub target_frame_radius: f32,
+    /// Lerp camera focus onto the selected body.
+    pub follow_selection: bool,
+}
+
+#[derive(Resource, Debug, Clone)]
+pub struct GameUx {
+    /// Draw full two-body orbit rings for major bodies (heliocentric).
+    pub show_system_orbits: bool,
+}
+
+impl Default for GameUx {
+    fn default() -> Self {
+        Self {
+            show_system_orbits: true,
+        }
+    }
+}
+
+#[derive(Resource, Debug, Default)]
+pub struct CameraInputState {
+    pub left_drag_pixels: f32,
 }
 
 impl Default for EditorState {
@@ -155,6 +179,9 @@ impl Default for EditorState {
             probe_delta_v: 500.0,
             velocity_dirty: false,
             selection_changed: false,
+            frame_camera: false,
+            target_frame_radius: 0.0,
+            follow_selection: true,
         }
     }
 }

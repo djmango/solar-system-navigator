@@ -2,8 +2,9 @@ use bevy::input::mouse::{MouseMotion, MouseWheel};
 use bevy::prelude::*;
 
 use crate::astro::AU;
-use crate::components::{CelestialBody, Position};
-use crate::resources::{EditorState, MapViewMode};
+use crate::components::{CelestialBody, Position, Velocity, VisualRadius};
+use crate::orbit::{self, RelativeState};
+use crate::resources::{CameraInputState, EditorState, MapViewMode, PhysicsConstants};
 
 #[derive(Component)]
 pub struct OrbitCamera {
@@ -22,8 +23,8 @@ impl Default for OrbitCamera {
             radius: 2.5 * AU,
             yaw: 0.7,
             pitch: 0.4,
-            min_radius: 1.0e9,
-            max_radius: 50.0 * AU,
+            min_radius: 5.0e7,
+            max_radius: 80.0 * AU,
         }
     }
 }
@@ -63,14 +64,42 @@ pub fn demo_orbit_camera(
     orbit.pitch = 0.35 + (time.elapsed_secs() * 0.05).sin() * 0.08;
 }
 
+pub fn select_body(editor: &mut EditorState, name: &str, frame: bool) {
+    let changed = editor.selected_name.as_deref() != Some(name);
+    editor.selected_name = Some(name.to_string());
+    editor.selection_changed = true;
+    editor.velocity_dirty = false;
+    if frame || changed {
+        editor.frame_camera = true;
+    }
+}
+
+/// Camera distance that frames a body and its approximate orbit.
+pub fn frame_distance_for_body(mu: f32, rel: RelativeState, visual_radius: f32) -> f32 {
+    let r = rel.position.length().max(visual_radius);
+    if let Some(elements) = orbit::elements_from_state(mu, rel)
+        && elements.semi_major_axis.is_finite()
+        && elements.semi_major_axis > 0.0
+    {
+        let a = elements.semi_major_axis;
+        return (a * 2.8)
+            .max(r * 2.2)
+            .max(visual_radius * 20.0)
+            .clamp(5.0e7, 60.0 * AU);
+    }
+    (r * 3.0).max(visual_radius * 25.0).clamp(5.0e7, 60.0 * AU)
+}
+
 pub fn focus_camera_on_selection(
     map_mode: Res<MapViewMode>,
-    editor: Res<EditorState>,
-    bodies: Query<(&CelestialBody, &Position)>,
+    mut editor: ResMut<EditorState>,
+    physics: Res<PhysicsConstants>,
+    active: Res<crate::resources::ActiveScenario>,
+    bodies: Query<(&CelestialBody, &Position, &Velocity, &VisualRadius)>,
     mut cameras: Query<&mut OrbitCamera, With<Camera3d>>,
     time: Res<Time>,
 ) {
-    if map_mode.active {
+    if map_mode.active || !editor.follow_selection {
         return;
     }
     let Ok(mut orbit) = cameras.single_mut() else {
@@ -79,12 +108,34 @@ pub fn focus_camera_on_selection(
     let Some(name) = &editor.selected_name else {
         return;
     };
-    let Some((_, position)) = bodies.iter().find(|(b, _)| &b.name == name) else {
+    let Some((_, position, velocity, visual)) = bodies.iter().find(|(b, _, _, _)| &b.name == name)
+    else {
         return;
     };
+
+    let primary = active.template.bodies.iter().find(|b| b.fixed);
+    let (primary_mass, primary_pos, primary_vel) = primary
+        .map(|p| (p.mass, p.position_vec3(), p.velocity_vec3()))
+        .unwrap_or((crate::astro::M_SUN, Vec3::ZERO, Vec3::ZERO));
+    let mu = physics.g * primary_mass;
+
     let target = position.0;
-    let t = (time.delta_secs() * 2.0).clamp(0.0, 1.0);
+    let t = (time.delta_secs() * 3.5).clamp(0.0, 1.0);
     orbit.focus = orbit.focus.lerp(target, t);
+
+    if editor.frame_camera {
+        let rel = RelativeState::new(position.0 - primary_pos, velocity.0 - primary_vel);
+        let desired = if editor.target_frame_radius > 0.0 {
+            editor.target_frame_radius
+        } else {
+            frame_distance_for_body(mu, rel, visual.0)
+        };
+        orbit.radius = orbit.radius.lerp(desired, t);
+        if (orbit.radius - desired).abs() < desired * 0.04 {
+            editor.frame_camera = false;
+            editor.target_frame_radius = 0.0;
+        }
+    }
 }
 
 pub fn orbit_camera_system(
@@ -93,6 +144,7 @@ pub fn orbit_camera_system(
     mut mouse_motion: MessageReader<MouseMotion>,
     mouse_button: Res<ButtonInput<MouseButton>>,
     keyboard: Res<ButtonInput<KeyCode>>,
+    mut camera_input: ResMut<CameraInputState>,
     mut cameras: Query<(&mut Transform, &mut OrbitCamera), With<Camera3d>>,
 ) {
     if map_mode.active {
@@ -103,17 +155,19 @@ pub fn orbit_camera_system(
         return;
     };
 
-    let pan_scale = (orbit.radius * 0.002).max(1.0e6);
-
-    let rotating =
+    let pan_scale = (orbit.radius * 0.0015).max(1.0e6);
+    let orbiting = mouse_button.pressed(MouseButton::Left);
+    let panning =
         mouse_button.pressed(MouseButton::Right) || mouse_button.pressed(MouseButton::Middle);
 
     for event in mouse_motion.read() {
-        if rotating && !mouse_button.pressed(MouseButton::Middle) {
+        let delta_len = event.delta.length();
+        if orbiting {
+            camera_input.left_drag_pixels += delta_len;
             orbit.yaw -= event.delta.x * 0.004;
             orbit.pitch += event.delta.y * 0.004;
             orbit.pitch = orbit.pitch.clamp(0.08, std::f32::consts::FRAC_PI_2 - 0.08);
-        } else if mouse_button.pressed(MouseButton::Middle) {
+        } else if panning {
             let right = *transform.right();
             let up = *transform.up();
             orbit.focus +=
@@ -121,16 +175,21 @@ pub fn orbit_camera_system(
         }
     }
 
+    if mouse_button.just_released(MouseButton::Left) && camera_input.left_drag_pixels < 4.0 {
+        // Small movement — treated as click; pick handled in interaction.rs on same frame.
+    }
+
     for event in mouse_wheel.read() {
         let scroll = event.y;
-        orbit.radius *= 1.0 - scroll * 0.08;
+        let factor = 1.0 - scroll * 0.12;
+        orbit.radius *= factor;
     }
 
     if keyboard.pressed(KeyCode::KeyW) {
-        orbit.radius *= 0.98;
+        orbit.radius *= 0.97;
     }
     if keyboard.pressed(KeyCode::KeyS) {
-        orbit.radius *= 1.02;
+        orbit.radius *= 1.03;
     }
     orbit.radius = orbit.radius.clamp(orbit.min_radius, orbit.max_radius);
 
