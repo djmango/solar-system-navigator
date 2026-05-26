@@ -9,7 +9,7 @@ mkdir -p artifacts
 cargo build --release
 
 export SOLAR_DEMO_RECORD=1
-export SOLAR_DEMO_FRAMES=600
+export SOLAR_DEMO_FRAMES=900
 
 ./target/release/solar-system-navigator &
 APP_PID=$!

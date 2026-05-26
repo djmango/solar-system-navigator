@@ -13,7 +13,7 @@ mod ui;
 use bevy::prelude::*;
 
 use camera::{demo_orbit_camera, orbit_camera_system, spawn_camera};
-use demo::{demo_auto_exit, demo_scenario_cycler};
+use demo::{demo_auto_exit, demo_scenario_cycler, demo_simulation_tuning};
 use input::keyboard_controls;
 use physics::orbital_physics;
 use resources::{
@@ -58,17 +58,17 @@ fn main() {
     app.add_message::<ReloadScenario>()
         .add_message::<SpawnProbe>()
         .add_systems(Startup, (spawn_camera, spawn_world, spawn_ui))
+        .add_systems(Update, (demo_orbit_camera, orbit_camera_system).chain())
         .add_systems(
             Update,
             (
                 orbital_physics,
                 apply_editor_selection,
                 draw_orbit_trails,
-                orbit_camera_system,
-                demo_orbit_camera,
                 ui_system,
                 update_hud_text,
                 keyboard_controls,
+                demo_simulation_tuning,
                 demo_scenario_cycler,
                 demo_auto_exit,
             ),

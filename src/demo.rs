@@ -1,6 +1,19 @@
 use bevy::prelude::*;
 
-use crate::resources::{ActiveScenario, DemoRecorder, ReloadScenario, ScenarioCatalog};
+use crate::resources::{
+    ActiveScenario, DemoRecorder, ReloadScenario, ScenarioCatalog, SimulationControl,
+};
+
+pub fn demo_simulation_tuning(
+    recorder: Option<Res<DemoRecorder>>,
+    mut simulation: ResMut<SimulationControl>,
+) {
+    if recorder.is_some() {
+        simulation.speed = 2.5;
+        simulation.ticks_per_frame = 4;
+        simulation.paused = false;
+    }
+}
 
 pub fn demo_scenario_cycler(
     time: Res<Time>,
