@@ -33,7 +33,7 @@ A **3D** Rust application for visualizing and experimenting with celestial traje
 ## Getting started
 
 ```bash
-git clone http://gitea.tail38cb01.ts.net:3000/djmango/solar-system-navigator.git
+git clone https://github.com/djmango/solar-system-navigator.git
 cd solar-system-navigator
 cargo run --release
 ```
