@@ -1,0 +1,18 @@
+---
+description: Add djmango as co-author on git commits from this repo
+alwaysApply: true
+---
+
+# Git co-author: djmango
+
+When you **create or amend** git commits in this repository, append this trailer to the commit message body (after the subject and blank line):
+
+```
+Co-authored-by: Sulaiman Khan Ghori <28496988+djmango@users.noreply.github.com>
+```
+
+Rules:
+
+- Do not duplicate the trailer if it is already present.
+- Keep the existing subject line and body unchanged; only add the trailer.
+- Use this for commits made by Cursor Agent or cloud agents unless the user explicitly opts out.
