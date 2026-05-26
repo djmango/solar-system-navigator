@@ -6,6 +6,8 @@ use std::process::Command;
 const REQUIRED_TEXTURES: &[&str] = &[
     "assets/textures/earth.jpg",
     "assets/textures/mars.jpg",
+    "assets/textures/mercury.jpg",
+    "assets/textures/moon.jpg",
     "assets/textures/sun.jpg",
     "assets/textures/venus.jpg",
 ];

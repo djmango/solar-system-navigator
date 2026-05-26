@@ -52,8 +52,12 @@ pub fn keyboard_controls(
         clear_maneuver_nodes(&mut planner);
     }
     if keyboard.just_pressed(KeyCode::KeyV) {
-        planner.show_previews = !planner.show_previews;
-        game_ux.show_system_orbits = !game_ux.show_system_orbits;
+        let on = !game_ux.show_system_orbits;
+        game_ux.show_system_orbits = on;
+        planner.show_previews = on || !planner.nodes.is_empty();
+    }
+    if keyboard.just_pressed(KeyCode::KeyG) {
+        editor.follow_selection = !editor.follow_selection;
     }
     if keyboard.just_pressed(KeyCode::KeyO) {
         planner.soi_auto = !planner.soi_auto;

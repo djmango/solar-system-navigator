@@ -3,8 +3,11 @@ use bevy::prelude::*;
 
 use crate::astro::AU;
 use crate::components::{CelestialBody, Position, Velocity, VisualRadius};
+use crate::components::{FixedBody, Mass};
 use crate::orbit::{self, RelativeState};
-use crate::resources::{CameraInputState, EditorState, MapViewMode, PhysicsConstants};
+use crate::resources::{
+    CameraInputState, EditorState, MapViewMode, PhysicsConstants, RoutePlanner,
+};
 
 #[derive(Component)]
 pub struct OrbitCamera {
@@ -94,8 +97,15 @@ pub fn focus_camera_on_selection(
     map_mode: Res<MapViewMode>,
     mut editor: ResMut<EditorState>,
     physics: Res<PhysicsConstants>,
-    active: Res<crate::resources::ActiveScenario>,
-    bodies: Query<(&CelestialBody, &Position, &Velocity, &VisualRadius)>,
+    planner: Res<RoutePlanner>,
+    bodies: Query<(
+        &CelestialBody,
+        &Mass,
+        &Position,
+        &Velocity,
+        &VisualRadius,
+        Option<&FixedBody>,
+    )>,
     mut cameras: Query<&mut OrbitCamera, With<Camera3d>>,
     time: Res<Time>,
 ) {
@@ -108,23 +118,35 @@ pub fn focus_camera_on_selection(
     let Some(name) = &editor.selected_name else {
         return;
     };
-    let Some((_, position, velocity, visual)) = bodies.iter().find(|(b, _, _, _)| &b.name == name)
+    let Some((_, _, position, velocity, visual, _)) =
+        bodies.iter().find(|(b, _, _, _, _, _)| &b.name == name)
     else {
         return;
     };
 
-    let primary = active.template.bodies.iter().find(|b| b.fixed);
-    let (primary_mass, primary_pos, primary_vel) = primary
-        .map(|p| (p.mass, p.position_vec3(), p.velocity_vec3()))
-        .unwrap_or((crate::astro::M_SUN, Vec3::ZERO, Vec3::ZERO));
-    let mu = physics.g * primary_mass;
+    let central_name = planner.central_body.clone().or_else(|| {
+        bodies
+            .iter()
+            .find(|(_, _, _, _, _, fixed)| fixed.is_some())
+            .map(|(c, _, _, _, _, _)| c.name.clone())
+    });
+    let (central_pos, central_vel, central_mass) = central_name
+        .as_ref()
+        .and_then(|n| {
+            bodies
+                .iter()
+                .find(|(b, _, _, _, _, _)| &b.name == n)
+                .map(|(_, m, p, v, _, _)| (p.0, v.0, m.0))
+        })
+        .unwrap_or((Vec3::ZERO, Vec3::ZERO, crate::astro::M_SUN));
+    let mu = physics.g * central_mass;
 
     let target = position.0;
     let t = (time.delta_secs() * 3.5).clamp(0.0, 1.0);
     orbit.focus = orbit.focus.lerp(target, t);
 
     if editor.frame_camera {
-        let rel = RelativeState::new(position.0 - primary_pos, velocity.0 - primary_vel);
+        let rel = RelativeState::new(position.0 - central_pos, velocity.0 - central_vel);
         let desired = if editor.target_frame_radius > 0.0 {
             editor.target_frame_radius
         } else {

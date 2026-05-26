@@ -1,10 +1,11 @@
 use bevy::prelude::*;
 
-use crate::components::{FixedBody, Mass, OrbitTrail, Position, Velocity};
+use crate::components::{CelestialBody, FixedBody, Mass, OrbitTrail, Position, Velocity};
 use crate::resources::{PhysicsConstants, SimulationControl, SimulationDiagnostics};
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 pub struct BodyState {
+    pub name: String,
     pub position: Vec3,
     pub velocity: Vec3,
     pub mass: f32,
@@ -62,6 +63,7 @@ pub fn orbital_physics(
     mut simulation_control: ResMut<SimulationControl>,
     mut diagnostics: ResMut<SimulationDiagnostics>,
     mut bodies: Query<(
+        &CelestialBody,
         &Mass,
         &mut Position,
         &mut Velocity,
@@ -81,7 +83,8 @@ pub fn orbital_physics(
     for _ in 0..steps {
         let snapshot: Vec<BodyState> = bodies
             .iter()
-            .map(|(mass, pos, vel, _, _, fixed)| BodyState {
+            .map(|(body, mass, pos, vel, _, _, fixed)| BodyState {
+                name: body.name.clone(),
                 position: pos.0,
                 velocity: vel.0,
                 mass: mass.0,
@@ -132,6 +135,7 @@ pub fn orbital_physics(
             .iter()
             .enumerate()
             .map(|(i, s)| BodyState {
+                name: s.name.clone(),
                 position: new_positions[i],
                 velocity: new_velocities[i],
                 mass: s.mass,
@@ -155,12 +159,13 @@ pub fn orbital_physics(
             accelerations_end.push(accel);
         }
 
-        for (i, (_, mut pos, mut vel, mut transform, mut trail, fixed)) in
-            bodies.iter_mut().enumerate()
-        {
+        for (body, _, mut pos, mut vel, mut transform, mut trail, fixed) in bodies.iter_mut() {
             if fixed.is_some() {
                 continue;
             }
+            let Some(i) = snapshot.iter().position(|s| s.name == body.name) else {
+                continue;
+            };
             let half_dt = dt_base * 0.5;
             vel.0 = new_velocities[i] + accelerations_end[i] * half_dt;
             pos.0 = new_positions[i];
@@ -178,6 +183,7 @@ mod tests {
     #[test]
     fn acceleration_points_toward_massive_body() {
         let bodies = [BodyState {
+            name: "Sun".to_string(),
             position: Vec3::ZERO,
             velocity: Vec3::ZERO,
             mass: 1000.0,
@@ -192,6 +198,7 @@ mod tests {
     #[test]
     fn self_interaction_is_zero() {
         let bodies = [BodyState {
+            name: "Probe".to_string(),
             position: Vec3::new(50.0, 0.0, 0.0),
             velocity: Vec3::ZERO,
             mass: 10.0,
@@ -207,12 +214,14 @@ mod tests {
     fn energy_is_negative_for_bound_pair() {
         let bodies = [
             BodyState {
+                name: "Sun".to_string(),
                 position: Vec3::ZERO,
                 velocity: Vec3::ZERO,
                 mass: 1000.0,
                 fixed: true,
             },
             BodyState {
+                name: "Probe".to_string(),
                 position: Vec3::new(100.0, 0.0, 0.0),
                 velocity: Vec3::new(0.0, 0.0, 3.5),
                 mass: 1.0,

@@ -169,6 +169,10 @@ pub struct CameraInputState {
     pub left_drag_pixels: f32,
 }
 
+/// Body under the cursor (for hover highlight).
+#[derive(Resource, Debug, Default, Clone)]
+pub struct HoveredBody(pub Option<String>);
+
 impl Default for EditorState {
     fn default() -> Self {
         Self {

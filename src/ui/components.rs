@@ -12,6 +12,8 @@ pub enum SliderType {
     BurnRadial,
     BurnTimeOffset,
     HohmannTargetRadius,
+    /// Planner preview time while paused (does not rewind N-body state).
+    SimTime,
 }
 
 #[derive(Component)]

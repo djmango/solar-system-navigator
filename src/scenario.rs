@@ -100,3 +100,56 @@ pub fn load_scenario(path: impl AsRef<Path>) -> Result<Scenario, String> {
 pub fn scenario_asset_path(relative: &str) -> String {
     format!("assets/{relative}")
 }
+
+/// Validate circular heliocentric speed for non-fixed bodies around the primary.
+pub fn validate_circular_speeds(scenario: &Scenario) -> Result<(), String> {
+    let primary = scenario
+        .bodies
+        .iter()
+        .find(|b| b.fixed)
+        .ok_or_else(|| "scenario has no fixed primary body".to_string())?;
+    let primary_pos = primary.position_vec3();
+
+    for body in &scenario.bodies {
+        if body.fixed || body.probe {
+            continue;
+        }
+        let r = (body.position_vec3() - primary_pos).length();
+        if r < 1.0 {
+            continue;
+        }
+        let expected = (scenario.g * primary.mass / r).sqrt();
+        let actual = body.velocity_vec3().length();
+        let rel_err = (actual - expected).abs() / expected;
+        if rel_err > 0.02 {
+            return Err(format!(
+                "{}: speed {actual:.0} m/s differs from circular {expected:.0} m/s by {:.1}%",
+                body.name,
+                rel_err * 100.0
+            ));
+        }
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn default_scenario_loads_and_has_circular_speeds() {
+        let path = scenario_asset_path("scenarios/default.toml");
+        let scenario = load_scenario(&path).expect("default scenario should parse");
+        assert!(scenario.bodies.len() >= 5);
+        validate_circular_speeds(&scenario).expect("inner system circular speeds");
+    }
+
+    #[test]
+    fn mission_scenarios_load() {
+        for rel in ["missions/apollo11.toml", "missions/osiris_rex.toml"] {
+            let path = scenario_asset_path(rel);
+            let scenario = load_scenario(&path).unwrap_or_else(|e| panic!("{rel}: {e}"));
+            assert!(!scenario.bodies.is_empty());
+        }
+    }
+}

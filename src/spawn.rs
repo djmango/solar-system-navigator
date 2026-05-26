@@ -7,10 +7,12 @@ use crate::components::{
 };
 use crate::planner::{compute_soi_radius_for_body, on_simulation_reset};
 use crate::resources::{
-    ActiveScenario, BodyTextureCache, EditorState, PhysicsConstants, RoutePlanner, SimulationClock,
-    WorldAssets,
+    ActiveScenario, BodyTextureCache, EditorState, HoveredBody, PhysicsConstants, RoutePlanner,
+    SimulationClock, WorldAssets,
 };
-use crate::scenario::{BodyDef, Scenario, load_scenario, scenario_asset_path};
+use crate::scenario::{
+    BodyDef, Scenario, load_scenario, scenario_asset_path, validate_circular_speeds,
+};
 
 const SELECTED_SCALE: f32 = 1.2;
 
@@ -44,6 +46,9 @@ pub fn spawn_world(
     }
 
     let scenario = active.template.clone();
+    if let Err(err) = validate_circular_speeds(&scenario) {
+        warn!("Scenario orbit check: {err}");
+    }
     active.name = scenario.name.clone();
     physics.g = scenario.g;
     physics.softening = scenario.softening;
@@ -96,6 +101,9 @@ pub fn reload_scenario(
     }
 
     active.template = scenario;
+    if let Err(err) = validate_circular_speeds(&active.template) {
+        warn!("Scenario orbit check: {err}");
+    }
     active.name = active.template.name.clone();
     physics.g = active.template.g;
     physics.softening = active.template.softening;
@@ -418,6 +426,7 @@ pub fn apply_editor_velocity(
 
 pub fn update_selection_visuals(
     editor: Res<EditorState>,
+    hovered: Res<HoveredBody>,
     mut bodies: Query<(
         &CelestialBody,
         &mut Transform,
@@ -425,10 +434,14 @@ pub fn update_selection_visuals(
         Option<&SelectedBody>,
     )>,
 ) {
+    const HOVER_SCALE: f32 = 1.12;
     for (body, mut transform, visual_radius, _) in &mut bodies {
         let selected = editor.selected_name.as_ref() == Some(&body.name);
+        let hover = hovered.0.as_ref() == Some(&body.name);
         let scale = if selected {
             visual_radius.0 * SELECTED_SCALE
+        } else if hover {
+            visual_radius.0 * HOVER_SCALE
         } else {
             visual_radius.0
         };

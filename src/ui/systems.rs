@@ -3,6 +3,7 @@ use bevy::prelude::*;
 
 use crate::astro::{self, AU};
 use crate::camera::OrbitCamera;
+use crate::components::{CelestialBody, Position};
 use crate::resources::{
     ActiveScenario, EditorState, GameUx, MapViewMode, RoutePlanner, SimulationClock,
     SimulationControl, SimulationDiagnostics,
@@ -83,8 +84,8 @@ pub fn spawn_ui(mut commands: Commands) {
                     "Vel X: 0",
                     SliderType::VelX,
                     0.0,
-                    -40_000.0,
-                    40_000.0,
+                    -80_000.0,
+                    80_000.0,
                     90.0,
                 );
                 spawn_slider(
@@ -92,8 +93,8 @@ pub fn spawn_ui(mut commands: Commands) {
                     "Vel Y: 0",
                     SliderType::VelY,
                     0.0,
-                    -40_000.0,
-                    40_000.0,
+                    -80_000.0,
+                    80_000.0,
                     90.0,
                 );
                 spawn_slider(
@@ -101,9 +102,18 @@ pub fn spawn_ui(mut commands: Commands) {
                     "Vel Z: 0",
                     SliderType::VelZ,
                     0.0,
-                    -40_000.0,
-                    40_000.0,
+                    -80_000.0,
+                    80_000.0,
                     90.0,
+                );
+                spawn_slider(
+                    row,
+                    "Sim t: 0s",
+                    SliderType::SimTime,
+                    0.0,
+                    0.0,
+                    astro::YEAR,
+                    0.0,
                 );
             });
 
@@ -181,7 +191,7 @@ pub fn spawn_ui(mut commands: Commands) {
 }
 
 fn help_lines() -> String {
-    "LMB drag: orbit camera | RMB/MMB: pan | Scroll: zoom | Click body: select & follow | Dbl-click/F: frame | Home: Sun | Tab: cycle | Space: pause | M: map (Esc exit) | V: orbit lines | P: probe | B/C: maneuver | H/Shift+H: Hohmann | 1-3: missions".to_string()
+    "LMB: orbit | RMB/MMB: pan | Click: select | Dbl-click/F: frame | Home: primary | G: toggle follow | Tab: cycle | Space: pause | Sim time slider (paused): planner clock | M: map | Esc: exit map | V: orbits | P: probe | B/C: burns | 1-3: missions".to_string()
 }
 
 fn spawn_slider(
@@ -253,6 +263,7 @@ pub fn update_hud_text(
     map_mode: Res<MapViewMode>,
     game_ux: Res<GameUx>,
     cameras: Query<&OrbitCamera, With<Camera3d>>,
+    bodies: Query<(&CelestialBody, &Position)>,
     mut diag_text: Query<&mut Text, With<DiagnosticsText>>,
     mut planner_text: Query<&mut Text, (With<PlannerText>, Without<DiagnosticsText>)>,
 ) {
@@ -264,17 +275,19 @@ pub fn update_hud_text(
         .single()
         .map(|c| astro::format_length(c.radius))
         .unwrap_or_else(|_| "?".to_string());
+    let orbit_note = if game_ux.show_system_orbits {
+        "2-body rings (osculating)"
+    } else {
+        "hidden"
+    };
+    let follow = if editor.follow_selection { "on" } else { "off" };
     **text = format!(
-        "Scenario: {} | Physics: SI (m, kg, s) | View dist: {} | Orbits: {} | Warp: {:.0}x | Paused: {} | Selected: {} | Probe Δv: {:.0} m/s | E: {:.3e} J",
+        "Scenario: {} | SI physics | View: {} | Orbits: {orbit_note} | Follow: {follow} | Warp: {:.0}x | Paused: {} | t={:.0}s | Selected: {} | Probe Δv: {:.0} m/s | E: {:.3e} J",
         active.name,
         view_dist,
-        if game_ux.show_system_orbits {
-            "shown"
-        } else {
-            "hidden"
-        },
         simulation.speed,
         simulation.paused,
+        clock.time,
         selected,
         editor.probe_delta_v,
         diagnostics.total_energy,
@@ -316,9 +329,21 @@ pub fn update_hud_text(
                 )
             })
             .unwrap_or_default();
+        let map_bodies = if map_mode.active {
+            let mut lines: Vec<String> = bodies
+                .iter()
+                .map(|(b, p)| {
+                    let r = p.0.length();
+                    format!("{} @ {}", b.name, astro::format_length(r))
+                })
+                .collect();
+            lines.sort();
+            format!(" | Bodies: {}", lines.join(", "))
+        } else {
+            String::new()
+        };
         **planner_ui = format!(
-            "Sim t: {:.1}s | Map: {} | SOI auto: {} | Central: {} | Target: {} | Nodes: {}{}",
-            clock.time,
+            "Map: {} | SOI auto: {} | Central: {} | Target: {} | Nodes: {}{} | Rings ≠ N-body path over long warps{map_bodies}",
             if map_mode.active { "ON" } else { "off" },
             if planner.soi_auto { "on" } else { "off" },
             central,
@@ -333,6 +358,7 @@ pub fn ui_system(
     mut simulation_control: ResMut<SimulationControl>,
     mut editor: ResMut<EditorState>,
     mut planner: ResMut<RoutePlanner>,
+    mut clock: ResMut<SimulationClock>,
     mut query_set: ParamSet<(
         Query<(
             Entity,
@@ -446,6 +472,11 @@ pub fn ui_system(
             SliderType::BurnRadial => planner.draft_radial = value,
             SliderType::BurnTimeOffset => planner.default_burn_offset = value,
             SliderType::HohmannTargetRadius => planner.hohmann_target_radius = value,
+            SliderType::SimTime => {
+                if simulation_control.paused {
+                    clock.time = value;
+                }
+            }
         }
 
         for (mut text, text_slider_type) in &mut value_texts {
@@ -463,6 +494,7 @@ pub fn ui_system(
                     SliderType::HohmannTargetRadius => {
                         format!("Hohmann r: {:.3} AU", value / AU)
                     }
+                    SliderType::SimTime => format!("Sim t: {value:.0}s"),
                 };
             }
         }

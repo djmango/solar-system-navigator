@@ -125,6 +125,7 @@ pub fn add_maneuver_node(planner: &mut RoutePlanner, clock: &SimulationClock) {
 
 pub fn clear_maneuver_nodes(planner: &mut RoutePlanner) {
     planner.nodes.clear();
+    // Maneuver prediction path only; system orbit rings use `GameUx::show_system_orbits`.
     planner.show_previews = false;
 }
 

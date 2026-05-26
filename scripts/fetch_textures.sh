@@ -49,9 +49,10 @@ fetch "${RES}_earth_daymap.jpg" earth.jpg || failed=$((failed + 1))
 fetch "${RES}_mars.jpg" mars.jpg || failed=$((failed + 1))
 fetch "${RES}_venus_surface.jpg" venus.jpg || failed=$((failed + 1))
 
+fetch "${RES}_mercury.jpg" mercury.jpg || failed=$((failed + 1))
+fetch "${RES}_moon.jpg" moon.jpg || failed=$((failed + 1))
+
 # Optional extras (for expanded scenarios)
-fetch "${RES}_mercury.jpg" mercury.jpg || true
-fetch "${RES}_moon.jpg" moon.jpg || true
 fetch "${RES}_jupiter.jpg" jupiter.jpg || true
 fetch "${RES}_saturn.jpg" saturn.jpg || true
 fetch "${RES}_saturn_ring_alpha.png" saturn_ring.png || true

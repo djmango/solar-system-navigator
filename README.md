@@ -4,13 +4,17 @@ A **3D** Rust application for visualizing and experimenting with celestial traje
 
 > **Units:** SI — meters, kilograms, seconds (`G = 6.67430×10⁻¹¹`). Orbits use circular, coplanar, mean-distance states (not a specific ephemeris date). For mission-grade ephemerides use [GMAT](https://gmat.sourceforge.io/) or STK. Planet **mesh size** is exaggerated via `visual_radius` so bodies remain visible at true orbital scale.
 
+> **Orbit rings vs simulation:** Colored rings are **two-body osculating ellipses** around the planner central body. The simulation is **full N-body** with a fixed primary — rings are planning aids and will diverge from simulated paths over long warps.
+
 ## Features
 
-- **3D real-time visualization** — PBR spheres, orbit trails, orbit camera (pan/zoom/rotate)
+- **3D real-time visualization** — PBR spheres, orbit trails, game-style orbit camera
+- **Click to select** — Hover highlight, follow camera, frame orbit in view
+- **Full orbit rings** — Heliocentric (or central-body) Kepler paths for all major bodies
 - **Data-driven scenarios** — Add or edit bodies in `assets/**/*.toml` without recompiling
 - **Mission presets** — Inner system, simplified Apollo 11, simplified OSIRIS-REx
-- **Simulation controls** — Speed, substeps, pause, single-step, reset
-- **Trajectory editor** — Select a body (Tab), adjust velocity with sliders
+- **Simulation controls** — Speed, substeps, pause, single-step, planner time (paused)
+- **Trajectory editor** — Select a body (click or Tab), adjust velocity with sliders
 - **Probe spawning** — Launch a probe from the selected body with configurable Δv
 - **Energy diagnostics** — Live kinetic/potential/total energy readout
 - **KSP-style route planner** — Maneuver nodes (TNW Δv), predicted orbit paths, map mode
@@ -22,7 +26,8 @@ A **3D** Rust application for visualizing and experimenting with celestial traje
 |-------|--------|
 | **Click** a planet | Select and follow with camera |
 | **Double-click** / **F** | Frame selection (fit orbit in view) |
-| **Home** | Focus the Sun |
+| **Home** | Focus the scenario primary (Sun, or Earth in Apollo preset) |
+| **G** | Toggle camera follow on selection |
 | LMB drag | Orbit camera (game-style) |
 | RMB / MMB drag | Pan |
 | Scroll / W / S | Zoom |
@@ -34,16 +39,17 @@ A **3D** Rust application for visualizing and experimenting with celestial traje
 | P | Spawn probe at selection |
 | [ / ] | Decrease / increase probe Δv |
 | +/- | Simulation speed |
-| M | Map mode — full heliocentric orbit rings (KSP-style) |
+| **Sim time** slider (HUD) | While **paused**, adjusts planner clock for maneuver previews |
+| M | Map mode — full orbit rings + body list in HUD |
 | Esc | Exit map mode |
 | Q / E | Rotate map view (in map mode) |
-| V | Toggle orbit lines (planets + maneuver previews) |
+| V | Toggle orbit lines (2-body rings + maneuver previews) |
 | B / C | Add / clear maneuver nodes |
 | O | Toggle automatic SOI central-body switching |
 | H / Shift+H | Hohmann Δv draft / add maneuver pair |
 | , / . | Decrease / increase time until next burn |
 
-Planet positions and velocities use **true SI scale**; mesh sizes use `visual_radius` in TOML so bodies stay visible at orbital distances.
+Planet positions and velocities use **true SI scale** in TOML; mesh sizes use `visual_radius` for visibility.
 
 ## Getting started
 
@@ -66,7 +72,7 @@ cd dist/solar-system-navigator && ./solar-system-navigator
 
 ```
 assets/
-  scenarios/default.toml    # Sun + inner planets (toy scale)
+  scenarios/default.toml    # Sun + inner planets (SI)
   missions/apollo11.toml
   missions/osiris_rex.toml
 src/
@@ -74,8 +80,9 @@ src/
   orbit.rs        # Two-body Kepler previews + TNW frame
   maneuver.rs     # Burn execution at maneuver nodes
   map_view.rs     # Map mode camera + orbit gizmos
+  interaction.rs  # Mouse pick, hover, camera framing
   planner.rs      # Sim clock + route planner sync
-  scenario.rs     # TOML loader
+  scenario.rs     # TOML loader + validation tests
   spawn.rs        # 3D entity spawning
   camera.rs       # Orbit camera
   ui/             # HUD + sliders
@@ -83,7 +90,7 @@ src/
 
 ## Planet textures (8K)
 
-After clone, download **8K** equirectangular maps (KSP-quality, CC-BY from Solar System Scope):
+After clone, download **8K** equirectangular maps (CC-BY from Solar System Scope):
 
 ```bash
 chmod +x scripts/fetch_textures.sh scripts/import_ksp_textures.sh

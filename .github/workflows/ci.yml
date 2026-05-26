@@ -21,6 +21,8 @@ jobs:
         with:
           toolchain: 1.95
           components: rustfmt, clippy
+      - name: Verify rust-toolchain.toml
+        run: grep -q '1.95' rust-toolchain.toml
       - uses: Swatinem/rust-cache@v2
       - name: cargo fmt
         run: cargo fmt --all -- --check

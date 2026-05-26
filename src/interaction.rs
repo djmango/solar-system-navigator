@@ -5,9 +5,12 @@ use bevy::window::PrimaryWindow;
 
 use crate::astro::AU;
 use crate::camera::{frame_distance_for_body, select_body};
-use crate::components::{CelestialBody, Position, VisualRadius};
+use crate::components::{CelestialBody, FixedBody, Mass, Position, Velocity, VisualRadius};
 use crate::orbit::RelativeState;
-use crate::resources::{CameraInputState, EditorState, MapViewMode, PhysicsConstants};
+use crate::resources::{
+    CameraInputState, EditorState, HoveredBody, MapViewMode, PhysicsConstants, RoutePlanner,
+};
+
 const CLICK_DRAG_THRESHOLD_PX: f32 = 8.0;
 const DOUBLE_CLICK_SECS: f32 = 0.35;
 
@@ -15,6 +18,69 @@ const DOUBLE_CLICK_SECS: f32 = 0.35;
 pub struct ClickTracker {
     last_time: f32,
     last_body: Option<String>,
+}
+
+type BodyQueryItem<'a> = (
+    &'a CelestialBody,
+    &'a Mass,
+    &'a Position,
+    &'a Velocity,
+    &'a VisualRadius,
+    Option<&'a FixedBody>,
+);
+
+pub fn update_body_hover(
+    map_mode: Res<MapViewMode>,
+    mouse: Res<ButtonInput<MouseButton>>,
+    camera_input: Res<CameraInputState>,
+    primary: Query<&Window, With<PrimaryWindow>>,
+    cameras: Query<(&Camera, &GlobalTransform), With<Camera3d>>,
+    bodies: Query<BodyQueryItem<'_>>,
+    ui_interactions: Query<&Interaction>,
+    mut hovered: ResMut<HoveredBody>,
+) {
+    if map_mode.active || mouse.pressed(MouseButton::Left) {
+        hovered.0 = None;
+        return;
+    }
+
+    let pointer_over_ui = ui_interactions
+        .iter()
+        .any(|i| matches!(i, Interaction::Pressed | Interaction::Hovered));
+    if pointer_over_ui || camera_input.left_drag_pixels > 2.0 {
+        hovered.0 = None;
+        return;
+    }
+
+    let Ok(window) = primary.single() else {
+        hovered.0 = None;
+        return;
+    };
+    let Some(cursor) = window.cursor_position() else {
+        hovered.0 = None;
+        return;
+    };
+    let Ok((camera, cam_transform)) = cameras.single() else {
+        hovered.0 = None;
+        return;
+    };
+    let Ok(ray) = camera.viewport_to_world(cam_transform, cursor) else {
+        hovered.0 = None;
+        return;
+    };
+
+    let origin = ray.origin;
+    let dir = ray.direction.normalize();
+    let mut best: Option<(f32, String)> = None;
+    for (body, _, position, _, visual, _) in &bodies {
+        let pick_r = visual.0 * 2.5;
+        if let Some(t) = ray_sphere_hit(origin, dir, position.0, pick_r)
+            && best.as_ref().is_none_or(|(best_t, _)| t < *best_t)
+        {
+            best = Some((t, body.name.clone()));
+        }
+    }
+    hovered.0 = best.map(|(_, name)| name);
 }
 
 pub fn body_pick_on_click(
@@ -25,22 +91,19 @@ pub fn body_pick_on_click(
     time: Res<Time>,
     map_mode: Res<MapViewMode>,
     physics: Res<PhysicsConstants>,
-    active: Res<crate::resources::ActiveScenario>,
+    planner: Res<RoutePlanner>,
     primary: Query<&Window, With<PrimaryWindow>>,
     cameras: Query<(&Camera, &GlobalTransform), With<Camera3d>>,
-    bodies: Query<(&CelestialBody, &Position, &VisualRadius)>,
+    bodies: Query<BodyQueryItem<'_>>,
     ui_interactions: Query<&Interaction>,
 ) {
     if map_mode.active {
         return;
     }
 
-    let pointer_over_ui = ui_interactions.iter().any(|i| {
-        matches!(
-            i,
-            Interaction::Pressed | Interaction::Hovered
-        )
-    });
+    let pointer_over_ui = ui_interactions
+        .iter()
+        .any(|i| matches!(i, Interaction::Pressed | Interaction::Hovered));
     if pointer_over_ui {
         if mouse.just_released(MouseButton::Left) {
             camera_input.left_drag_pixels = 0.0;
@@ -74,18 +137,17 @@ pub fn body_pick_on_click(
     let origin = ray.origin;
     let dir = ray.direction.normalize();
 
-    let mut best: Option<(f32, String, f32)> = None;
-    for (body, position, visual) in &bodies {
-        let center = position.0;
+    let mut best: Option<(f32, String)> = None;
+    for (body, _, position, _, visual, _) in &bodies {
         let pick_r = visual.0 * 2.5;
-        if let Some(t) = ray_sphere_hit(origin, dir, center, pick_r)
-            && best.as_ref().is_none_or(|(best_t, _, _)| t < *best_t)
+        if let Some(t) = ray_sphere_hit(origin, dir, position.0, pick_r)
+            && best.as_ref().is_none_or(|(best_t, _)| t < *best_t)
         {
-            best = Some((t, body.name.clone(), visual.0));
+            best = Some((t, body.name.clone()));
         }
     }
 
-    let Some((_, name, visual_r)) = best else {
+    let Some((_, name)) = best else {
         return;
     };
 
@@ -101,9 +163,8 @@ pub fn body_pick_on_click(
     select_body(&mut editor, &name, true);
     editor.target_frame_radius = 0.0;
     if double_click {
-        frame_selected_body(&mut editor, &physics, &active, &bodies, &name);
+        frame_selected_body(&mut editor, &physics, &planner, &bodies, &name);
     }
-    let _ = visual_r;
 }
 
 fn ray_sphere_hit(origin: Vec3, dir: Vec3, center: Vec3, radius: f32) -> Option<f32> {
@@ -134,8 +195,8 @@ pub fn frame_camera_hotkey(
     mut editor: ResMut<EditorState>,
     map_mode: Res<MapViewMode>,
     physics: Res<PhysicsConstants>,
-    active: Res<crate::resources::ActiveScenario>,
-    bodies: Query<(&CelestialBody, &Position, &VisualRadius)>,
+    planner: Res<RoutePlanner>,
+    bodies: Query<BodyQueryItem<'_>>,
 ) {
     if map_mode.active {
         return;
@@ -146,56 +207,90 @@ pub fn frame_camera_hotkey(
     let Some(name) = editor.selected_name.clone() else {
         return;
     };
-    frame_selected_body(&mut editor, &physics, &active, &bodies, &name);
+    frame_selected_body(&mut editor, &physics, &planner, &bodies, &name);
 }
 
-pub fn focus_sun_hotkey(
+/// Focus the scenario primary (fixed) body — Sun in heliocentric presets, Earth in Apollo, etc.
+pub fn focus_primary_hotkey(
     keyboard: Res<ButtonInput<KeyCode>>,
     mut editor: ResMut<EditorState>,
-    active: Res<crate::resources::ActiveScenario>,
+    physics: Res<PhysicsConstants>,
+    planner: Res<RoutePlanner>,
+    bodies: Query<BodyQueryItem<'_>>,
 ) {
     if !keyboard.just_pressed(KeyCode::Home) {
         return;
     }
-    let sun = active
-        .template
-        .bodies
+    let primary = bodies
         .iter()
-        .find(|b| b.fixed)
-        .map(|b| b.name.clone())
-        .unwrap_or_else(|| "Sun".to_string());
-    select_body(&mut editor, &sun, true);
-    editor.target_frame_radius = 2.5 * AU;
+        .find(|(_, _, _, _, _, fixed)| fixed.is_some())
+        .or_else(|| {
+            planner
+                .central_body
+                .as_ref()
+                .and_then(|name| bodies.iter().find(|(b, _, _, _, _, _)| &b.name == name))
+        });
+    let Some((c, _, pos, vel, visual, _)) = primary else {
+        return;
+    };
+    select_body(&mut editor, &c.name, true);
+    editor.target_frame_radius =
+        primary_frame_radius(&physics, &planner, &c.name, pos.0, vel.0, visual.0);
+    editor.frame_camera = true;
 }
 
-fn frame_selected_body(
+fn primary_frame_radius(
+    physics: &PhysicsConstants,
+    planner: &RoutePlanner,
+    primary_name: &str,
+    pos: Vec3,
+    vel: Vec3,
+    visual: f32,
+) -> f32 {
+    if primary_name == "Sun" || planner.central_body.as_deref() == Some("Sun") {
+        return 2.5 * AU;
+    }
+    let rel = RelativeState::new(pos, vel);
+    frame_distance_for_body(physics.g * crate::astro::M_SUN, rel, visual).min(1.0e10)
+}
+
+fn central_state(
+    planner: &RoutePlanner,
+    bodies: &Query<BodyQueryItem<'_>>,
+) -> Option<(Vec3, Vec3, f32)> {
+    let name = planner.central_body.clone().or_else(|| {
+        bodies
+            .iter()
+            .find(|(_, _, _, _, _, fixed)| fixed.is_some())
+            .map(|(c, _, _, _, _, _)| c.name.clone())
+    })?;
+    let (_, mass, pos, vel, _, _) = bodies.iter().find(|(b, _, _, _, _, _)| b.name == name)?;
+    Some((pos.0, vel.0, mass.0))
+}
+
+pub fn frame_selected_body(
     editor: &mut EditorState,
     physics: &PhysicsConstants,
-    active: &crate::resources::ActiveScenario,
-    bodies: &Query<(&CelestialBody, &Position, &VisualRadius)>,
+    planner: &RoutePlanner,
+    bodies: &Query<BodyQueryItem<'_>>,
     name: &str,
 ) {
-    let primary = active.template.bodies.iter().find(|b| b.fixed);
-    let (primary_mass, primary_pos) = primary
-        .map(|p| (p.mass, p.position_vec3()))
-        .unwrap_or((crate::astro::M_SUN, Vec3::ZERO));
-    let mu = physics.g * primary_mass;
-
-    let Some((_, pos, visual)) = bodies.iter().find(|(b, _, _)| b.name == name) else {
+    let Some((central_pos, central_vel, central_mass)) = central_state(planner, bodies) else {
         editor.frame_camera = true;
         editor.target_frame_radius = AU;
         return;
     };
 
-    let rel_vel = active
-        .template
-        .bodies
-        .iter()
-        .find(|b| b.name == name)
-        .map(|b| b.velocity_vec3())
-        .unwrap_or(Vec3::ZERO);
-    let primary_vel = primary.map(|p| p.velocity_vec3()).unwrap_or(Vec3::ZERO);
-    let rel = RelativeState::new(pos.0 - primary_pos, rel_vel - primary_vel);
+    let mu = physics.g * central_mass;
+
+    let Some((_, _, pos, vel, visual, _)) = bodies.iter().find(|(b, _, _, _, _, _)| b.name == name)
+    else {
+        editor.frame_camera = true;
+        editor.target_frame_radius = AU;
+        return;
+    };
+
+    let rel = RelativeState::new(pos.0 - central_pos, vel.0 - central_vel);
     editor.target_frame_radius = frame_distance_for_body(mu, rel, visual.0);
     editor.frame_camera = true;
 }
