@@ -1,8 +1,10 @@
 use bevy::prelude::*;
 
 use crate::components::{CelestialBody, Velocity};
+use crate::planner::{add_maneuver_node, clear_maneuver_nodes, on_simulation_reset};
 use crate::resources::{
-    ActiveScenario, EditorState, ReloadScenario, ScenarioCatalog, SimulationControl, SpawnProbe,
+    ActiveScenario, EditorState, MapViewMode, ReloadScenario, RoutePlanner, ScenarioCatalog,
+    SimulationClock, SimulationControl, SpawnProbe,
 };
 
 pub fn keyboard_controls(
@@ -10,6 +12,9 @@ pub fn keyboard_controls(
     mut simulation: ResMut<SimulationControl>,
     mut active: ResMut<ActiveScenario>,
     mut editor: ResMut<EditorState>,
+    mut planner: ResMut<RoutePlanner>,
+    mut clock: ResMut<SimulationClock>,
+    mut map_mode: ResMut<MapViewMode>,
     catalog: Res<ScenarioCatalog>,
     mut reload: MessageWriter<ReloadScenario>,
     bodies: Query<(&CelestialBody, &Velocity)>,
@@ -22,7 +27,31 @@ pub fn keyboard_controls(
         simulation.step_once = true;
     }
     if keyboard.just_pressed(KeyCode::KeyR) {
+        on_simulation_reset(&mut clock, &mut planner);
         reload.write(ReloadScenario);
+    }
+    if keyboard.just_pressed(KeyCode::KeyB) {
+        add_maneuver_node(&mut planner, &clock);
+    }
+    if keyboard.just_pressed(KeyCode::KeyC) {
+        clear_maneuver_nodes(&mut planner);
+    }
+    if keyboard.just_pressed(KeyCode::KeyV) {
+        planner.show_previews = !planner.show_previews;
+    }
+    if map_mode.active {
+        if keyboard.pressed(KeyCode::KeyQ) {
+            map_mode.yaw -= 0.02;
+        }
+        if keyboard.pressed(KeyCode::KeyE) {
+            map_mode.yaw += 0.02;
+        }
+    }
+    if keyboard.just_pressed(KeyCode::Comma) {
+        planner.default_burn_offset = (planner.default_burn_offset - 5.0).max(1.0);
+    }
+    if keyboard.just_pressed(KeyCode::Period) {
+        planner.default_burn_offset += 5.0;
     }
     if keyboard.just_pressed(KeyCode::Equal) || keyboard.just_pressed(KeyCode::NumpadAdd) {
         simulation.speed = (simulation.speed + 0.25).min(8.0);

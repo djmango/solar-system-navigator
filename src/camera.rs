@@ -2,7 +2,7 @@ use bevy::input::mouse::{MouseMotion, MouseWheel};
 use bevy::prelude::*;
 
 use crate::components::{CelestialBody, Position};
-use crate::resources::EditorState;
+use crate::resources::{EditorState, MapViewMode};
 
 #[derive(Component)]
 pub struct OrbitCamera {
@@ -32,6 +32,10 @@ pub fn spawn_camera(mut commands: Commands) {
     commands.spawn((Camera3d::default(), orbit_camera_transform(&orbit), orbit));
 }
 
+pub fn orbit_camera_transform_public(orbit: &OrbitCamera) -> Transform {
+    orbit_camera_transform(orbit)
+}
+
 fn orbit_camera_transform(orbit: &OrbitCamera) -> Transform {
     let pitch = orbit.pitch.clamp(0.08, std::f32::consts::FRAC_PI_2 - 0.08);
     let horizontal = orbit.radius * pitch.cos();
@@ -59,11 +63,15 @@ pub fn demo_orbit_camera(
 }
 
 pub fn focus_camera_on_selection(
+    map_mode: Res<MapViewMode>,
     editor: Res<EditorState>,
     bodies: Query<(&CelestialBody, &Position)>,
     mut cameras: Query<&mut OrbitCamera, With<Camera3d>>,
     time: Res<Time>,
 ) {
+    if map_mode.active {
+        return;
+    }
     let Ok(mut orbit) = cameras.single_mut() else {
         return;
     };
@@ -79,12 +87,17 @@ pub fn focus_camera_on_selection(
 }
 
 pub fn orbit_camera_system(
+    map_mode: Res<MapViewMode>,
     mut mouse_wheel: MessageReader<MouseWheel>,
     mut mouse_motion: MessageReader<MouseMotion>,
     mouse_button: Res<ButtonInput<MouseButton>>,
     keyboard: Res<ButtonInput<KeyCode>>,
     mut cameras: Query<(&mut Transform, &mut OrbitCamera), With<Camera3d>>,
 ) {
+    if map_mode.active {
+        return;
+    }
+
     let Ok((mut transform, mut orbit)) = cameras.single_mut() else {
         return;
     };

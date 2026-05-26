@@ -4,7 +4,11 @@ mod camera;
 mod components;
 mod demo;
 mod input;
+mod maneuver;
+mod map_view;
+mod orbit;
 mod physics;
+mod planner;
 mod resources;
 mod scenario;
 mod spawn;
@@ -16,9 +20,12 @@ use camera::{demo_orbit_camera, focus_camera_on_selection, orbit_camera_system, 
 use demo::{demo_auto_exit, demo_scenario_cycler, demo_simulation_tuning};
 use input::keyboard_controls;
 use physics::orbital_physics;
+use maneuver::execute_maneuver_burns;
+use map_view::{draw_orbit_previews, map_mode_camera, toggle_map_mode};
+use planner::{advance_simulation_clock, sync_route_planner_targets};
 use resources::{
-    ActiveScenario, DemoRecorder, PhysicsConstants, ReloadScenario, ScenarioCatalog,
-    SimulationControl, SimulationDiagnostics, SpawnProbe,
+    ActiveScenario, DemoRecorder, MapViewMode, PhysicsConstants, ReloadScenario, RoutePlanner,
+    ScenarioCatalog, SimulationClock, SimulationControl, SimulationDiagnostics, SpawnProbe,
 };
 use scenario::{load_scenario, scenario_asset_path};
 use spawn::{
@@ -48,6 +55,9 @@ fn main() {
     }))
     .insert_resource(ClearColor(Color::srgb(0.02, 0.02, 0.04)))
     .init_resource::<SimulationControl>()
+    .init_resource::<SimulationClock>()
+    .init_resource::<RoutePlanner>()
+    .init_resource::<MapViewMode>()
     .init_resource::<PhysicsConstants>()
     .init_resource::<SimulationDiagnostics>()
     .init_resource::<ScenarioCatalog>()
@@ -77,13 +87,24 @@ fn main() {
         .add_systems(
             Update,
             (
+                sync_route_planner_targets,
                 sync_editor_from_selection,
                 apply_editor_velocity,
+                execute_maneuver_burns,
                 orbital_physics,
+                advance_simulation_clock,
                 update_selection_visuals,
                 draw_orbit_trails,
+                draw_orbit_previews,
             )
                 .chain(),
+        )
+        .add_systems(
+            Update,
+            (
+                toggle_map_mode,
+                map_mode_camera,
+            ),
         )
         .add_systems(
             Update,

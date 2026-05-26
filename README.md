@@ -13,6 +13,8 @@ A **3D** Rust application for visualizing and experimenting with celestial traje
 - **Trajectory editor** — Select a body (Tab), adjust velocity with sliders
 - **Probe spawning** — Launch a probe from the selected body with configurable Δv
 - **Energy diagnostics** — Live kinetic/potential/total energy readout
+- **KSP-style route planner** — Maneuver nodes (TNW Δv), predicted orbit paths, map mode
+- **Starfield & improved materials** — Emissive sun/planets, optional atmosphere tint in TOML
 
 ## Controls
 
@@ -29,6 +31,12 @@ A **3D** Rust application for visualizing and experimenting with celestial traje
 | P | Spawn probe at selection |
 | [ / ] | Decrease / increase probe Δv |
 | +/- | Simulation speed |
+| M | Toggle map mode (top-down system view) |
+| Q / E | Rotate map view (in map mode) |
+| B | Add maneuver node at current draft Δv |
+| C | Clear maneuver nodes |
+| V | Toggle orbit previews |
+| , / . | Decrease / increase time until next burn |
 
 ## Getting started
 
@@ -47,6 +55,10 @@ assets/
   missions/osiris_rex.toml
 src/
   physics.rs      # N-body gravity + integrator (unit tested)
+  orbit.rs        # Two-body Kepler previews + TNW frame
+  maneuver.rs     # Burn execution at maneuver nodes
+  map_view.rs     # Map mode camera + orbit gizmos
+  planner.rs      # Sim clock + route planner sync
   scenario.rs     # TOML loader
   spawn.rs        # 3D entity spawning
   camera.rs       # Orbit camera

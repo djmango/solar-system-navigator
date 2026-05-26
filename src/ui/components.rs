@@ -7,6 +7,10 @@ pub enum SliderType {
     VelX,
     VelY,
     VelZ,
+    BurnPrograde,
+    BurnNormal,
+    BurnRadial,
+    BurnTimeOffset,
 }
 
 #[derive(Component)]
@@ -30,3 +34,6 @@ pub struct DiagnosticsText;
 
 #[derive(Component)]
 pub struct HelpText;
+
+#[derive(Component)]
+pub struct PlannerText;

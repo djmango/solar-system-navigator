@@ -1,9 +1,12 @@
 use bevy::input::mouse::MouseButton;
 use bevy::prelude::*;
 
-use crate::resources::{ActiveScenario, EditorState, SimulationControl, SimulationDiagnostics};
+use crate::resources::{
+    ActiveScenario, EditorState, MapViewMode, RoutePlanner, SimulationClock, SimulationControl,
+    SimulationDiagnostics,
+};
 use crate::ui::components::{
-    DiagnosticsText, HelpText, HudRoot, Slider, SliderHandle, SliderType, ValueText,
+    DiagnosticsText, HelpText, HudRoot, PlannerText, Slider, SliderHandle, SliderType, ValueText,
 };
 
 pub fn spawn_ui(mut commands: Commands) {
@@ -69,11 +72,49 @@ pub fn spawn_ui(mut commands: Commands) {
                 spawn_slider(row, "Vel Y: 0.0", SliderType::VelY, 0.0, -20.0, 20.0, 100.0);
                 spawn_slider(row, "Vel Z: 0.0", SliderType::VelZ, 0.0, -20.0, 20.0, 100.0);
             });
+
+            root.spawn((
+                Text::new("Route planner"),
+                TextFont {
+                    font_size: 16.0,
+                    ..default()
+                },
+                TextColor(Color::srgb(0.9, 0.82, 0.55)),
+            ));
+            root.spawn((
+                Text::new(""),
+                TextFont {
+                    font_size: 13.0,
+                    ..default()
+                },
+                TextColor(Color::srgb(0.72, 0.78, 0.88)),
+                PlannerText,
+            ));
+            root.spawn(Node {
+                flex_direction: FlexDirection::Row,
+                column_gap: Val::Px(16.0),
+                flex_wrap: FlexWrap::Wrap,
+                ..default()
+            })
+            .with_children(|row| {
+                spawn_slider(row, "Δv prograde: 0.5", SliderType::BurnPrograde, 0.5, -5.0, 5.0, 90.0);
+                spawn_slider(row, "Δv normal: 0.0", SliderType::BurnNormal, 0.0, -5.0, 5.0, 90.0);
+                spawn_slider(row, "Δv radial: 0.0", SliderType::BurnRadial, 0.0, -5.0, 5.0, 90.0);
+                spawn_slider(
+                    row,
+                    "Burn in: 30s",
+                    SliderType::BurnTimeOffset,
+                    30.0,
+                    1.0,
+                    180.0,
+                    80.0,
+                );
+            });
         });
 }
 
 fn help_lines() -> String {
-    "RMB drag: orbit | MMB: pan | Scroll: zoom | Space: pause | N: step | R: reset | 1-3: missions | Tab: select body | P: spawn probe | [ ]: probe Δv".to_string()
+    "RMB: orbit | MMB: pan | Scroll: zoom | Space: pause | N: step | R: reset | 1-3: missions | Tab: select | P: probe | [ ]: probe Δv | M: map mode | Q/E: rotate map | B: add burn node | C: clear nodes | V: toggle previews | ,/.: burn timing".to_string()
 }
 
 fn spawn_slider(
@@ -140,7 +181,11 @@ pub fn update_hud_text(
     simulation: Res<SimulationControl>,
     diagnostics: Res<SimulationDiagnostics>,
     editor: Res<EditorState>,
+    clock: Res<SimulationClock>,
+    planner: Res<RoutePlanner>,
+    map_mode: Res<MapViewMode>,
     mut diag_text: Query<&mut Text, With<DiagnosticsText>>,
+    mut planner_text: Query<&mut Text, (With<PlannerText>, Without<DiagnosticsText>)>,
 ) {
     let Ok(mut text) = diag_text.single_mut() else {
         return;
@@ -159,11 +204,45 @@ pub fn update_hud_text(
         selected,
         editor.probe_delta_v,
     );
+
+    if let Ok(mut planner_ui) = planner_text.single_mut() {
+        let central = planner.central_body.as_deref().unwrap_or("auto");
+        let target = planner.target_body.as_deref().unwrap_or("(none)");
+        let nodes: String = if planner.nodes.is_empty() {
+            "none".to_string()
+        } else {
+            planner
+                .nodes
+                .iter()
+                .enumerate()
+                .map(|(i, n)| {
+                    format!(
+                        "#{i} t={:.0}s Δv=({:.2},{:.2},{:.2}){}",
+                        n.time,
+                        n.prograde,
+                        n.normal,
+                        n.radial,
+                        if n.executed { " ✓" } else { "" }
+                    )
+                })
+                .collect::<Vec<_>>()
+                .join(" | ")
+        };
+        **planner_ui = format!(
+            "Sim t: {:.1}s | Map: {} | Central: {} | Target: {} | Nodes: {}",
+            clock.time,
+            if map_mode.active { "ON" } else { "off" },
+            central,
+            target,
+            nodes,
+        );
+    }
 }
 
 pub fn ui_system(
     mut simulation_control: ResMut<SimulationControl>,
     mut editor: ResMut<EditorState>,
+    mut planner: ResMut<RoutePlanner>,
     mut query_set: ParamSet<(
         Query<(
             Entity,
@@ -272,6 +351,10 @@ pub fn ui_system(
                 editor.velocity_z = value;
                 editor.velocity_dirty = true;
             }
+            SliderType::BurnPrograde => planner.draft_prograde = value,
+            SliderType::BurnNormal => planner.draft_normal = value,
+            SliderType::BurnRadial => planner.draft_radial = value,
+            SliderType::BurnTimeOffset => planner.default_burn_offset = value,
         }
 
         for (mut text, text_slider_type) in &mut value_texts {
@@ -282,6 +365,10 @@ pub fn ui_system(
                     SliderType::VelX => format!("Vel X: {value:.1}"),
                     SliderType::VelY => format!("Vel Y: {value:.1}"),
                     SliderType::VelZ => format!("Vel Z: {value:.1}"),
+                    SliderType::BurnPrograde => format!("Δv prograde: {value:.2}"),
+                    SliderType::BurnNormal => format!("Δv normal: {value:.2}"),
+                    SliderType::BurnRadial => format!("Δv radial: {value:.2}"),
+                    SliderType::BurnTimeOffset => format!("Burn in: {value:.0}s"),
                 };
             }
         }

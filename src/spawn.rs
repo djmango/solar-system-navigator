@@ -2,10 +2,13 @@ use bevy::light::GlobalAmbientLight;
 use bevy::prelude::*;
 
 use crate::components::{
-    CelestialBody, FixedBody, Mass, OrbitTrail, Position, Probe, SelectedBody, Velocity,
-    VisualRadius,
+    CelestialBody, FixedBody, Mass, OrbitTrail, Position, Probe, SelectedBody, Starfield,
+    Velocity, VisualRadius,
 };
-use crate::resources::{ActiveScenario, EditorState, PhysicsConstants, WorldAssets};
+use crate::planner::on_simulation_reset;
+use crate::resources::{
+    ActiveScenario, EditorState, PhysicsConstants, RoutePlanner, SimulationClock, WorldAssets,
+};
 use crate::scenario::{BodyDef, Scenario, load_scenario, scenario_asset_path};
 
 const SELECTED_SCALE: f32 = 1.2;
@@ -14,10 +17,13 @@ pub fn spawn_world(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
+    stars: Query<Entity, With<Starfield>>,
     world_assets: Option<Res<WorldAssets>>,
     mut active: ResMut<ActiveScenario>,
     mut physics: ResMut<PhysicsConstants>,
     mut editor: ResMut<EditorState>,
+    mut clock: ResMut<SimulationClock>,
+    mut planner: ResMut<RoutePlanner>,
 ) {
     let sphere_mesh = if let Some(assets) = world_assets {
         assets.sphere_mesh.clone()
@@ -29,14 +35,23 @@ pub fn spawn_world(
         mesh
     };
 
+    if stars.is_empty() {
+        spawn_lighting(&mut commands);
+        spawn_starfield(&mut commands, &mut meshes, &mut materials);
+    }
+
     let scenario = active.template.clone();
     active.name = scenario.name.clone();
     physics.g = scenario.g;
     physics.softening = scenario.softening;
-
-    spawn_lighting(&mut commands);
     spawn_bodies(&mut commands, &mut materials, &sphere_mesh, &scenario);
     sync_editor_from_scenario(&mut editor, &scenario);
+    planner.central_body = scenario
+        .bodies
+        .iter()
+        .find(|b| b.fixed)
+        .map(|b| b.name.clone());
+    on_simulation_reset(&mut clock, &mut planner);
 }
 
 pub fn reload_scenario(
@@ -47,6 +62,8 @@ pub fn reload_scenario(
     mut active: ResMut<ActiveScenario>,
     mut physics: ResMut<PhysicsConstants>,
     mut editor: ResMut<EditorState>,
+    mut clock: ResMut<SimulationClock>,
+    mut planner: ResMut<RoutePlanner>,
     bodies: Query<Entity, With<CelestialBody>>,
 ) {
     if events.read().next().is_none() {
@@ -77,6 +94,13 @@ pub fn reload_scenario(
         &active.template,
     );
     sync_editor_from_scenario(&mut editor, &active.template);
+    planner.central_body = active
+        .template
+        .bodies
+        .iter()
+        .find(|b| b.fixed)
+        .map(|b| b.name.clone());
+    on_simulation_reset(&mut clock, &mut planner);
 }
 
 fn sync_editor_from_scenario(editor: &mut EditorState, scenario: &Scenario) {
@@ -89,6 +113,47 @@ fn sync_editor_from_scenario(editor: &mut EditorState, scenario: &Scenario) {
         editor.velocity_z = first.velocity[2];
     } else {
         editor.selected_name = None;
+    }
+}
+
+fn spawn_starfield(
+    commands: &mut Commands,
+    meshes: &mut ResMut<Assets<Mesh>>,
+    materials: &mut ResMut<Assets<StandardMaterial>>,
+) {
+    let star_mesh = meshes.add(Sphere::new(1.0));
+    let star_material = materials.add(StandardMaterial {
+        base_color: Color::srgb(0.95, 0.97, 1.0),
+        emissive: LinearRgba::new(1.8, 1.9, 2.2, 1.0),
+        unlit: true,
+        ..default()
+    });
+
+    let mut rng_state: u32 = 0xC0FFEE_u32;
+    for _ in 0..600 {
+        rng_state = rng_state.wrapping_mul(1_664_525).wrapping_add(1_013_904_223);
+        let u = (rng_state as f32) / u32::MAX as f32;
+        rng_state = rng_state.wrapping_mul(1_664_525).wrapping_add(1_013_904_223);
+        let v = (rng_state as f32) / u32::MAX as f32;
+        rng_state = rng_state.wrapping_mul(1_664_525).wrapping_add(1_013_904_223);
+        let w = (rng_state as f32) / u32::MAX as f32;
+
+        let theta = u * std::f32::consts::TAU;
+        let phi = (v * 2.0 - 1.0).acos();
+        let radius = 6_000.0 + w * 4_000.0;
+        let position = Vec3::new(
+            radius * phi.sin() * theta.cos(),
+            radius * phi.cos(),
+            radius * phi.sin() * theta.sin(),
+        );
+        let scale = 1.5 + w * 4.0;
+
+        commands.spawn((
+            Mesh3d(star_mesh.clone()),
+            MeshMaterial3d(star_material.clone()),
+            Transform::from_translation(position).with_scale(Vec3::splat(scale)),
+            Starfield,
+        ));
     }
 }
 
@@ -140,12 +205,28 @@ fn spawn_body(
     def: &BodyDef,
 ) {
     let position = def.position_vec3();
+    let base = def.color();
+    let atmosphere = def
+        .atmosphere_color()
+        .unwrap_or_else(|| base.mix(&Color::srgb(0.6, 0.75, 1.0), 0.35));
+    let emissive_strength = if def.fixed {
+        def.emissive * 4.0
+    } else {
+        def.emissive * 0.35
+    };
+    let emissive_color: LinearRgba = if def.fixed {
+        LinearRgba::from(base) * emissive_strength
+    } else {
+        LinearRgba::from(atmosphere) * emissive_strength + LinearRgba::from(base) * 0.15
+    };
+
     let material = materials.add(StandardMaterial {
-        base_color: def.color(),
-        emissive: def.color().into(),
-        emissive_exposure_weight: if def.fixed { 2.0 } else { 0.8 },
-        metallic: 0.05,
-        perceptual_roughness: 0.75,
+        base_color: base,
+        emissive: emissive_color,
+        emissive_exposure_weight: if def.fixed { 2.5 } else { 1.2 },
+        metallic: if def.probe { 0.35 } else { 0.08 },
+        perceptual_roughness: if def.probe { 0.35 } else { 0.62 },
+        reflectance: if def.fixed { 0.6 } else { 0.45 },
         ..default()
     });
 
@@ -299,6 +380,8 @@ pub fn spawn_probe(
         velocity: (velocity.0 + Vec3::new(editor.probe_delta_v, 0.0, 0.0)).to_array(),
         radius: 2.0,
         color: [0.9, 0.95, 1.0],
+        emissive: 1.2,
+        atmosphere: None,
         fixed: false,
         probe: true,
     };

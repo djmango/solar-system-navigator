@@ -29,10 +29,18 @@ pub struct BodyDef {
     pub velocity: [f32; 3],
     pub radius: f32,
     pub color: [f32; 3],
+    #[serde(default = "default_emissive")]
+    pub emissive: f32,
+    #[serde(default)]
+    pub atmosphere: Option<[f32; 3]>,
     #[serde(default)]
     pub fixed: bool,
     #[serde(default)]
     pub probe: bool,
+}
+
+fn default_emissive() -> f32 {
+    0.8
 }
 
 impl BodyDef {
@@ -46,6 +54,10 @@ impl BodyDef {
 
     pub fn color(&self) -> Color {
         Color::srgb(self.color[0], self.color[1], self.color[2])
+    }
+
+    pub fn atmosphere_color(&self) -> Option<Color> {
+        self.atmosphere.map(|[r, g, b]| Color::srgb(r, g, b))
     }
 }
 

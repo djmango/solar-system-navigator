@@ -51,6 +51,78 @@ pub struct ActiveScenario {
     pub template: Scenario,
 }
 
+#[derive(Resource, Debug, Clone)]
+pub struct SimulationClock {
+    pub time: f32,
+}
+
+impl Default for SimulationClock {
+    fn default() -> Self {
+        Self { time: 0.0 }
+    }
+}
+
+#[derive(Resource, Debug, Clone)]
+pub struct MapViewMode {
+    pub active: bool,
+    pub yaw: f32,
+}
+
+impl Default for MapViewMode {
+    fn default() -> Self {
+        Self {
+            active: false,
+            yaw: 0.0,
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct ManeuverNode {
+    pub time: f32,
+    pub prograde: f32,
+    pub normal: f32,
+    pub radial: f32,
+    pub executed: bool,
+}
+
+impl ManeuverNode {
+    pub fn delta_v_magnitude(&self) -> f32 {
+        (self.prograde * self.prograde + self.normal * self.normal + self.radial * self.radial).sqrt()
+    }
+}
+
+#[derive(Resource, Debug, Clone)]
+pub struct RoutePlanner {
+    pub nodes: Vec<ManeuverNode>,
+    pub central_body: Option<String>,
+    pub target_body: Option<String>,
+    pub draft_prograde: f32,
+    pub draft_normal: f32,
+    pub draft_radial: f32,
+    pub default_burn_offset: f32,
+    pub preview_horizon: f32,
+    pub preview_step: f32,
+    pub show_previews: bool,
+}
+
+impl Default for RoutePlanner {
+    fn default() -> Self {
+        Self {
+            nodes: Vec::new(),
+            central_body: None,
+            target_body: None,
+            draft_prograde: 0.5,
+            draft_normal: 0.0,
+            draft_radial: 0.0,
+            default_burn_offset: 30.0,
+            preview_horizon: 400.0,
+            preview_step: 0.35,
+            show_previews: false,
+        }
+    }
+}
+
 #[derive(Resource, Debug, Clone, Default)]
 pub struct EditorState {
     pub selected_name: Option<String>,
