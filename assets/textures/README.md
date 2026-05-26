@@ -1,28 +1,48 @@
-# Planet textures
+# Planet textures (8K)
 
-Bundled maps are **2K** downloads from [Solar System Scope textures](https://www.solarsystemscope.com/textures/) (free for educational/non-commercial use; credit the site in derivatives).
-
-| File | Body |
-|------|------|
-| `sun.jpg` | Sun |
-| `earth.jpg` | Earth |
-| `mars.jpg` | Mars |
-| `venus.jpg` | Venus |
-
-Re-download:
+High-resolution maps are **not stored in git** (too large). Download after clone:
 
 ```bash
 ./scripts/fetch_textures.sh
 ```
 
-## Other sources (not bundled)
+Default resolution is **8K** (8192×4096 equirectangular, same style as many KSP visual mods). For a lighter install:
 
-- **NASA Visible Earth / 3D Resources** — public-domain U.S. government imagery ([visibleearth.nasa.gov](https://visibleearth.nasa.gov/))
-- **Celestia** — GPL texture packs (check license if redistributing)
-- **KSP mods** — often **all-rights-reserved** or mod-specific licenses; do not commit Squad/third-party assets without permission. Use them locally only if the license allows.
+```bash
+SOLAR_TEXTURE_RES=2k ./scripts/fetch_textures.sh
+```
 
-Reference a texture in scenario TOML:
+## Source (recommended)
+
+[Solar System Scope textures](https://www.solarsystemscope.com/textures/) — **CC-BY 4.0**, NASA-derived, free for education and commercial use with attribution. These are the same family of maps used in many planet visual packs.
+
+| File | Body |
+|------|------|
+| `sun.jpg` | Sun |
+| `earth.jpg` | Earth (day) |
+| `mars.jpg` | Mars |
+| `venus.jpg` | Venus |
+| `mercury.jpg` | Mercury (optional) |
+| `moon.jpg` | Moon (optional) |
+| `jupiter.jpg` | Jupiter (optional) |
+| `saturn.jpg` | Saturn (optional) |
+
+## KSP mod textures (local only)
+
+You **cannot** commit Squad or third-party KSP mod textures to this repo without permission. If you own KSP + texture mods (RSS, Spectra, etc.), import maps locally:
+
+```bash
+./scripts/import_ksp_textures.sh earth=/path/to/YourEarth8k.png mars=/path/to/YourMars8k.png
+# or scan a folder:
+KSP_TEXTURE_PACK_DIR=~/path/to/mod/8k ./scripts/import_ksp_textures.sh --scan
+```
+
+Stock KSP often ships **DDS** files — convert to PNG/JPG first.
+
+## Scenario TOML
 
 ```toml
 texture = "textures/earth.jpg"
 ```
+
+If the file is missing, the body falls back to solid `color` from TOML.

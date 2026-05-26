@@ -18,4 +18,12 @@
 *.so
 
 # Bevy specific
-assets/.DS_Store 
+assets/.DS_Store
+
+# High-res planet textures (run ./scripts/fetch_textures.sh)
+assets/textures/*.jpg
+assets/textures/*.jpeg
+assets/textures/*.png
+assets/textures/*.webp
+!assets/textures/README.md
+!assets/textures/.gitkeep

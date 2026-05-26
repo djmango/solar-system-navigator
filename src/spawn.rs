@@ -234,6 +234,10 @@ fn validate_body(body: &BodyDef) -> Result<(), &'static str> {
     Ok(())
 }
 
+fn texture_asset_exists(relative: &str) -> bool {
+    std::path::Path::new("assets").join(relative).is_file()
+}
+
 fn texture_handle(
     asset_server: &AssetServer,
     cache: &mut BodyTextureCache,
@@ -271,10 +275,14 @@ fn spawn_body(
         LinearRgba::from(atmosphere) * emissive_strength + LinearRgba::from(base) * 0.15
     };
 
-    let base_texture = def
-        .texture
-        .as_ref()
-        .map(|path| texture_handle(asset_server, texture_cache, path));
+    let base_texture = def.texture.as_ref().filter(|path| texture_asset_exists(path)).map(
+        |path| {
+            if !texture_cache.handles.contains_key(path) {
+                info!("Loading texture: {path}");
+            }
+            texture_handle(asset_server, texture_cache, path)
+        },
+    );
 
     let mut material = StandardMaterial {
         base_color: Color::WHITE,
@@ -292,6 +300,12 @@ fn spawn_body(
         }
     } else {
         material.base_color = base;
+        if def.texture.is_some() {
+            warn!(
+                "Texture missing for '{}' (run ./scripts/fetch_textures.sh) — using color fallback",
+                def.name
+            );
+        }
     }
 
     let material = materials.add(material);

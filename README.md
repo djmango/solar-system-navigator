@@ -68,15 +68,18 @@ src/
   ui/             # HUD + sliders
 ```
 
-## Planet textures
+## Planet textures (8K)
 
-Bundled under `assets/textures/` (see `assets/textures/README.md` for credits). To re-download:
+After clone, download **8K** equirectangular maps (KSP-quality, CC-BY from Solar System Scope):
 
 ```bash
+chmod +x scripts/fetch_textures.sh scripts/import_ksp_textures.sh
 ./scripts/fetch_textures.sh
 ```
 
-Reference in TOML: `texture = "textures/earth.jpg"`. Optional `soi_radius` or scenario `soi_scale` tune patched-conics SOI.
+Use `SOLAR_TEXTURE_RES=2k` for smaller downloads. To use **your own KSP mod textures** locally (not redistributed), see `scripts/import_ksp_textures.sh` and `assets/textures/README.md`.
+
+Reference in TOML: `texture = "textures/earth.jpg"`. Missing files fall back to solid `color`.
 
 ## Recording a demo video
 
