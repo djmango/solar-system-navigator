@@ -10,7 +10,14 @@ pub struct Scenario {
     pub g: f32,
     #[serde(default = "default_softening")]
     pub softening: f32,
+    /// Scales auto-computed Hill SOI radii (1.0 = default).
+    #[serde(default = "default_soi_scale")]
+    pub soi_scale: f32,
     pub bodies: Vec<BodyDef>,
+}
+
+fn default_soi_scale() -> f32 {
+    1.0
 }
 
 fn default_g() -> f32 {
@@ -33,6 +40,12 @@ pub struct BodyDef {
     pub emissive: f32,
     #[serde(default)]
     pub atmosphere: Option<[f32; 3]>,
+    /// Asset path relative to `assets/` (e.g. `textures/earth.jpg`).
+    #[serde(default)]
+    pub texture: Option<String>,
+    /// Override Hill SOI radius; auto-computed from mass and orbit if omitted.
+    #[serde(default)]
+    pub soi_radius: Option<f32>,
     #[serde(default)]
     pub fixed: bool,
     #[serde(default)]

@@ -36,6 +36,9 @@ A **3D** Rust application for visualizing and experimenting with celestial traje
 | B | Add maneuver node at current draft Δv |
 | C | Clear maneuver nodes |
 | V | Toggle orbit previews |
+| O | Toggle automatic SOI central-body switching |
+| H | Compute Hohmann transfer (sets prograde Δv to 1st burn) |
+| Shift+H | Add Hohmann departure + arrival maneuver nodes |
 | , / . | Decrease / increase time until next burn |
 
 ## Getting started
@@ -64,6 +67,16 @@ src/
   camera.rs       # Orbit camera
   ui/             # HUD + sliders
 ```
+
+## Planet textures
+
+Bundled under `assets/textures/` (see `assets/textures/README.md` for credits). To re-download:
+
+```bash
+./scripts/fetch_textures.sh
+```
+
+Reference in TOML: `texture = "textures/earth.jpg"`. Optional `soi_radius` or scenario `soi_scale` tune patched-conics SOI.
 
 ## Recording a demo video
 

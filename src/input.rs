@@ -1,10 +1,13 @@
 use bevy::prelude::*;
 
-use crate::components::{CelestialBody, Velocity};
-use crate::planner::{add_maneuver_node, clear_maneuver_nodes, on_simulation_reset};
+use crate::components::{CelestialBody, Mass, Position, SoiRadius, Velocity};
+use crate::planner::{
+    add_hohmann_maneuver_pair, add_maneuver_node, apply_hohmann_departure_draft,
+    build_soi_snapshots, clear_maneuver_nodes, compute_hohmann_for_target, on_simulation_reset,
+};
 use crate::resources::{
-    ActiveScenario, EditorState, MapViewMode, ReloadScenario, RoutePlanner, ScenarioCatalog,
-    SimulationClock, SimulationControl, SpawnProbe,
+    ActiveScenario, EditorState, MapViewMode, PhysicsConstants, ReloadScenario, RoutePlanner,
+    ScenarioCatalog, SimulationClock, SimulationControl, SpawnProbe,
 };
 
 pub fn keyboard_controls(
@@ -19,6 +22,16 @@ pub fn keyboard_controls(
     mut reload: MessageWriter<ReloadScenario>,
     bodies: Query<(&CelestialBody, &Velocity)>,
     mut spawn_probe_events: MessageWriter<SpawnProbe>,
+    physics: Res<PhysicsConstants>,
+    soi_bodies: Query<(
+        &CelestialBody,
+        &Mass,
+        &Position,
+        &Velocity,
+        &SoiRadius,
+        Option<&crate::components::FixedBody>,
+        Option<&crate::components::Probe>,
+    )>,
 ) {
     if keyboard.just_pressed(KeyCode::Space) {
         simulation.paused = !simulation.paused;
@@ -38,6 +51,19 @@ pub fn keyboard_controls(
     }
     if keyboard.just_pressed(KeyCode::KeyV) {
         planner.show_previews = !planner.show_previews;
+    }
+    if keyboard.just_pressed(KeyCode::KeyO) {
+        planner.soi_auto = !planner.soi_auto;
+    }
+    if keyboard.just_pressed(KeyCode::KeyH) {
+        let snapshots = build_soi_snapshots(&soi_bodies);
+        if let Some(xfer) = compute_hohmann_for_target(&mut planner, physics.g, &snapshots) {
+            if keyboard.pressed(KeyCode::ShiftLeft) || keyboard.pressed(KeyCode::ShiftRight) {
+                add_hohmann_maneuver_pair(&mut planner, &clock, &xfer);
+            } else {
+                apply_hohmann_departure_draft(&mut planner, &xfer);
+            }
+        }
     }
     if map_mode.active {
         if keyboard.pressed(KeyCode::KeyQ) {

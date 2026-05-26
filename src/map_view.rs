@@ -2,10 +2,13 @@
 
 use bevy::prelude::*;
 
-use crate::components::{CelestialBody, FixedBody, Mass as BodyMass, Position, Probe, Velocity};
-use crate::orbit::{self, RelativeState};
-use crate::resources::{MapViewMode, PhysicsConstants, RoutePlanner, SimulationClock};
 use crate::camera::OrbitCamera;
+use crate::components::{
+    CelestialBody, FixedBody, Mass as BodyMass, Position, Probe, SoiRadius, Velocity,
+};
+use crate::orbit;
+use crate::planner::{build_soi_snapshots, relative_target_state};
+use crate::resources::{MapViewMode, PhysicsConstants, RoutePlanner, SimulationClock};
 
 const MAP_RADIUS: f32 = 1400.0;
 const MAP_PITCH: f32 = std::f32::consts::FRAC_PI_2 - 0.02;
@@ -23,7 +26,8 @@ pub fn toggle_map_mode(
 
 pub fn map_mode_camera(
     map_mode: Res<MapViewMode>,
-    bodies: Query<(&CelestialBody, &Position, Option<&FixedBody>)>,
+    planner: Res<RoutePlanner>,
+    bodies: Query<(&CelestialBody, &Position)>,
     mut cameras: Query<(&mut Transform, &mut OrbitCamera), With<Camera3d>>,
 ) {
     if !map_mode.active {
@@ -34,10 +38,16 @@ pub fn map_mode_camera(
         return;
     };
 
-    let focus = bodies
-        .iter()
-        .find(|(_, _, fixed)| fixed.is_some())
-        .map(|(_, p, _)| p.0)
+    let focus = planner
+        .central_body
+        .as_ref()
+        .and_then(|name| {
+            bodies
+                .iter()
+                .find(|(c, _)| &c.name == name)
+                .map(|(_, p)| p.0)
+        })
+        .or_else(|| bodies.iter().next().map(|(_, p)| p.0))
         .unwrap_or(Vec3::ZERO);
 
     orbit.focus = focus;
@@ -58,6 +68,7 @@ pub fn draw_orbit_previews(
         &BodyMass,
         &Position,
         &Velocity,
+        &SoiRadius,
         Option<&FixedBody>,
         Option<&Probe>,
     )>,
@@ -66,65 +77,52 @@ pub fn draw_orbit_previews(
         return;
     }
 
-    let snapshot: Vec<_> = bodies
-        .iter()
-        .map(|(c, m, p, v, fixed, probe)| {
-            (
-                c.name.clone(),
-                m.0,
-                p.0,
-                v.0,
-                fixed.is_some(),
-                probe.is_some(),
-            )
-        })
-        .collect();
+    let snapshots = build_soi_snapshots(&bodies);
 
-    let central_name = planner
-        .central_body
-        .clone()
-        .or_else(|| snapshot.iter().find(|(_, _, _, _, fixed, _)| *fixed).map(|(n, _, _, _, _, _)| n.clone()));
+    let central_name = planner.central_body.clone().or_else(|| {
+        snapshots
+            .iter()
+            .find(|b| b.is_primary)
+            .map(|b| b.name.clone())
+    });
 
     let Some(central_name) = central_name else {
         return;
     };
 
-    let Some((_, mu_mass, central_pos, _, _, _)) = snapshot
-        .iter()
-        .find(|(n, _, _, _, fixed, _)| n == &central_name && *fixed)
-    else {
-        return;
+    let central = match snapshots.iter().find(|b| b.name == central_name) {
+        Some(c) => c,
+        None => return,
     };
-    let mu = physics.g * mu_mass;
+    let mu = physics.g * central.mass;
 
     let target_name = planner.target_body.clone().or_else(|| {
-        snapshot
+        snapshots
             .iter()
-            .find(|(_, _, _, _, fixed, probe)| !*fixed && *probe)
-            .or_else(|| snapshot.iter().find(|(_, _, _, _, fixed, _)| !*fixed))
-            .map(|(n, _, _, _, _, _)| n.clone())
+            .find(|b| !b.is_primary)
+            .map(|b| b.name.clone())
     });
 
     let Some(target_name) = target_name else {
         return;
     };
 
-    let Some((_, _, ship_pos, ship_vel, _, is_probe)) = snapshot
+    let is_probe = bodies
         .iter()
-        .find(|(n, _, _, _, _, _)| n == &target_name)
-    else {
+        .any(|(c, _, _, _, _, _, probe)| c.name == target_name && probe.is_some());
+
+    let Some(rel) = relative_target_state(&snapshots, &central_name, &target_name) else {
         return;
     };
 
-    let rel = RelativeState::new(*ship_pos - *central_pos, *ship_vel);
-    let color_current = if *is_probe {
+    let color_current = if is_probe {
         Color::srgba(0.3, 0.95, 1.0, 0.85)
     } else {
         Color::srgba(0.5, 0.85, 1.0, 0.7)
     };
 
     let current_path = orbit::sample_orbit_path(mu, rel, 128);
-    draw_path_inertial(&mut gizmos, &current_path, *central_pos, color_current);
+    draw_path_inertial(&mut gizmos, &current_path, central.position, color_current);
 
     let node_params: Vec<(f32, f32, f32, f32)> = planner
         .nodes
@@ -139,40 +137,45 @@ pub fn draw_orbit_previews(
         draw_path_inertial(
             &mut gizmos,
             &predicted,
-            *central_pos,
+            central.position,
             Color::srgba(1.0, 0.55, 0.15, 0.9),
         );
 
         for node in &planner.nodes {
             let time_offset = (node.time - clock.time).max(0.0);
             if let Some(pos) = position_at_time(&predicted, time_offset, step) {
-                let world = *central_pos + pos;
-                gizmos.sphere(world, 4.0, Color::srgba(1.0, 0.9, 0.2, 0.95));
-                let dv = node.delta_v_magnitude();
-                if dv > 0.01 {
-                    let (_, n_hat, r_hat) = orbit::tnw_frame(RelativeState::new(
-                        pos,
-                        Vec3::ZERO,
-                    ));
-                    let dir = (n_hat * node.normal + r_hat * node.radial).normalize_or_zero();
-                    let burn_dir = if dir.length_squared() > 1e-6 {
-                        dir
-                    } else {
-                        orbit::tnw_frame(RelativeState::new(pos, Vec3::X)).0
-                    };
-                    gizmos.arrow(world, world + burn_dir * (8.0 + dv * 2.0), Color::srgb(1.0, 0.4, 0.1));
-                }
+                let world = central.position + pos;
+                let marker = 3.0 + node.delta_v_magnitude() * 0.5;
+                gizmos.sphere(world, marker, Color::srgba(1.0, 0.9, 0.2, 0.95));
             }
         }
     }
 
     if map_mode.active {
-        for (_, _, pos, _, fixed, _) in &snapshot {
-            if *fixed {
-                gizmos.sphere(*pos, 22.0, Color::srgba(1.0, 0.85, 0.2, 0.25));
-            }
+        draw_soi_gizmos(&mut gizmos, &snapshots);
+        if let Some(xfer) = planner.last_hohmann {
+            draw_hohmann_target_orbit(&mut gizmos, mu, central.position, xfer.r2);
         }
     }
+}
+
+fn draw_soi_gizmos(gizmos: &mut Gizmos, bodies: &[crate::soi::SoiBodySnapshot]) {
+    for body in bodies {
+        if body.is_primary || !body.soi_radius.is_finite() || body.soi_radius <= 0.0 {
+            continue;
+        }
+        let color = Color::srgba(0.4, 0.75, 1.0, 0.22);
+        gizmos.sphere(body.position, body.soi_radius, color);
+    }
+}
+
+fn draw_hohmann_target_orbit(gizmos: &mut Gizmos, mu: f32, origin: Vec3, radius: f32) {
+    let state = orbit::RelativeState::new(
+        Vec3::new(radius, 0.0, 0.0),
+        Vec3::new(0.0, 0.0, (mu / radius).sqrt()),
+    );
+    let path = orbit::sample_orbit_path(mu, state, 96);
+    draw_path_inertial(gizmos, &path, origin, Color::srgba(0.85, 0.35, 1.0, 0.55));
 }
 
 fn draw_path_inertial(gizmos: &mut Gizmos, path: &[Vec3], origin: Vec3, color: Color) {

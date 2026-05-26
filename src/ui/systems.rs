@@ -109,12 +109,21 @@ pub fn spawn_ui(mut commands: Commands) {
                     180.0,
                     80.0,
                 );
+                spawn_slider(
+                    row,
+                    "Hohmann r: 480",
+                    SliderType::HohmannTargetRadius,
+                    480.0,
+                    80.0,
+                    900.0,
+                    120.0,
+                );
             });
         });
 }
 
 fn help_lines() -> String {
-    "RMB: orbit | MMB: pan | Scroll: zoom | Space: pause | N: step | R: reset | 1-3: missions | Tab: select | P: probe | [ ]: probe Δv | M: map mode | Q/E: rotate map | B: add burn node | C: clear nodes | V: toggle previews | ,/.: burn timing".to_string()
+    "RMB: orbit | MMB: pan | Scroll: zoom | Space: pause | N: step | R: reset | 1-3: missions | Tab: select | P: probe | M: map | B: burn node | C: clear | H: Hohmann Δv1 | Shift+H: Hohmann nodes | O: SOI auto | V: previews | ,/.: burn timing".to_string()
 }
 
 fn spawn_slider(
@@ -228,13 +237,28 @@ pub fn update_hud_text(
                 .collect::<Vec<_>>()
                 .join(" | ")
         };
+        let hohmann = planner
+            .last_hohmann
+            .map(|h| {
+                format!(
+                    " | Hohmann r2={:.0} Δv1={:.2} Δv2={:.2} T={:.0}s total={:.2}",
+                    h.r2,
+                    h.dv_departure,
+                    h.dv_arrival,
+                    h.transfer_time,
+                    h.total_delta_v()
+                )
+            })
+            .unwrap_or_default();
         **planner_ui = format!(
-            "Sim t: {:.1}s | Map: {} | Central: {} | Target: {} | Nodes: {}",
+            "Sim t: {:.1}s | Map: {} | SOI auto: {} | Central: {} | Target: {} | Nodes: {}{}",
             clock.time,
             if map_mode.active { "ON" } else { "off" },
+            if planner.soi_auto { "on" } else { "off" },
             central,
             target,
             nodes,
+            hohmann,
         );
     }
 }
@@ -355,6 +379,7 @@ pub fn ui_system(
             SliderType::BurnNormal => planner.draft_normal = value,
             SliderType::BurnRadial => planner.draft_radial = value,
             SliderType::BurnTimeOffset => planner.default_burn_offset = value,
+            SliderType::HohmannTargetRadius => planner.hohmann_target_radius = value,
         }
 
         for (mut text, text_slider_type) in &mut value_texts {
@@ -369,6 +394,7 @@ pub fn ui_system(
                     SliderType::BurnNormal => format!("Δv normal: {value:.2}"),
                     SliderType::BurnRadial => format!("Δv radial: {value:.2}"),
                     SliderType::BurnTimeOffset => format!("Burn in: {value:.0}s"),
+                    SliderType::HohmannTargetRadius => format!("Hohmann r: {value:.0}"),
                 };
             }
         }

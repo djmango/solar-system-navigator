@@ -9,6 +9,8 @@ mod map_view;
 mod orbit;
 mod physics;
 mod planner;
+mod soi;
+mod transfer;
 mod resources;
 mod scenario;
 mod spawn;
@@ -22,10 +24,13 @@ use input::keyboard_controls;
 use physics::orbital_physics;
 use maneuver::execute_maneuver_burns;
 use map_view::{draw_orbit_previews, map_mode_camera, toggle_map_mode};
-use planner::{advance_simulation_clock, sync_route_planner_targets};
+use planner::{
+    advance_simulation_clock, sync_route_planner_targets, update_soi_central_body,
+};
 use resources::{
-    ActiveScenario, DemoRecorder, MapViewMode, PhysicsConstants, ReloadScenario, RoutePlanner,
-    ScenarioCatalog, SimulationClock, SimulationControl, SimulationDiagnostics, SpawnProbe,
+    ActiveScenario, BodyTextureCache, DemoRecorder, MapViewMode, PhysicsConstants, ReloadScenario,
+    RoutePlanner, ScenarioCatalog, SimulationClock, SimulationControl, SimulationDiagnostics,
+    SpawnProbe,
 };
 use scenario::{load_scenario, scenario_asset_path};
 use spawn::{
@@ -58,6 +63,7 @@ fn main() {
     .init_resource::<SimulationClock>()
     .init_resource::<RoutePlanner>()
     .init_resource::<MapViewMode>()
+    .init_resource::<BodyTextureCache>()
     .init_resource::<PhysicsConstants>()
     .init_resource::<SimulationDiagnostics>()
     .init_resource::<ScenarioCatalog>()
@@ -88,6 +94,7 @@ fn main() {
             Update,
             (
                 sync_route_planner_targets,
+                update_soi_central_body,
                 sync_editor_from_selection,
                 apply_editor_velocity,
                 execute_maneuver_burns,

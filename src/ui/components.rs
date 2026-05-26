@@ -11,6 +11,7 @@ pub enum SliderType {
     BurnNormal,
     BurnRadial,
     BurnTimeOffset,
+    HohmannTargetRadius,
 }
 
 #[derive(Component)]

@@ -2,12 +2,13 @@ use bevy::light::GlobalAmbientLight;
 use bevy::prelude::*;
 
 use crate::components::{
-    CelestialBody, FixedBody, Mass, OrbitTrail, Position, Probe, SelectedBody, Starfield,
-    Velocity, VisualRadius,
+    CelestialBody, FixedBody, Mass, OrbitTrail, Position, Probe, SelectedBody, SoiRadius,
+    Starfield, Velocity, VisualRadius,
 };
-use crate::planner::on_simulation_reset;
+use crate::planner::{compute_soi_radius_for_body, on_simulation_reset};
 use crate::resources::{
-    ActiveScenario, EditorState, PhysicsConstants, RoutePlanner, SimulationClock, WorldAssets,
+    ActiveScenario, BodyTextureCache, EditorState, PhysicsConstants, RoutePlanner,
+    SimulationClock, WorldAssets,
 };
 use crate::scenario::{BodyDef, Scenario, load_scenario, scenario_asset_path};
 
@@ -15,8 +16,10 @@ const SELECTED_SCALE: f32 = 1.2;
 
 pub fn spawn_world(
     mut commands: Commands,
+    asset_server: Res<AssetServer>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
+    mut texture_cache: ResMut<BodyTextureCache>,
     stars: Query<Entity, With<Starfield>>,
     world_assets: Option<Res<WorldAssets>>,
     mut active: ResMut<ActiveScenario>,
@@ -44,7 +47,14 @@ pub fn spawn_world(
     active.name = scenario.name.clone();
     physics.g = scenario.g;
     physics.softening = scenario.softening;
-    spawn_bodies(&mut commands, &mut materials, &sphere_mesh, &scenario);
+    spawn_bodies(
+        &mut commands,
+        &asset_server,
+        &mut texture_cache,
+        &mut materials,
+        &sphere_mesh,
+        &scenario,
+    );
     sync_editor_from_scenario(&mut editor, &scenario);
     planner.central_body = scenario
         .bodies
@@ -57,7 +67,9 @@ pub fn spawn_world(
 pub fn reload_scenario(
     mut events: MessageReader<crate::resources::ReloadScenario>,
     mut commands: Commands,
+    asset_server: Res<AssetServer>,
     mut materials: ResMut<Assets<StandardMaterial>>,
+    mut texture_cache: ResMut<BodyTextureCache>,
     world_assets: Res<WorldAssets>,
     mut active: ResMut<ActiveScenario>,
     mut physics: ResMut<PhysicsConstants>,
@@ -89,6 +101,8 @@ pub fn reload_scenario(
     physics.softening = active.template.softening;
     spawn_bodies(
         &mut commands,
+        &asset_server,
+        &mut texture_cache,
         &mut materials,
         &world_assets.sphere_mesh,
         &active.template,
@@ -175,16 +189,32 @@ fn spawn_lighting(commands: &mut Commands) {
 
 fn spawn_bodies(
     commands: &mut Commands,
+    asset_server: &AssetServer,
+    texture_cache: &mut BodyTextureCache,
     materials: &mut ResMut<Assets<StandardMaterial>>,
     sphere_mesh: &Handle<Mesh>,
     scenario: &Scenario,
 ) {
+    let primary = scenario.bodies.iter().find(|b| b.fixed);
+    let (primary_mass, primary_position) = primary
+        .map(|p| (p.mass, p.position_vec3()))
+        .unwrap_or((1.0, Vec3::ZERO));
+
     for body in &scenario.bodies {
         if let Err(err) = validate_body(body) {
             warn!("Skipping body '{}': {err}", body.name);
             continue;
         }
-        spawn_body(commands, materials, sphere_mesh, body);
+        let soi = compute_soi_radius_for_body(body, scenario, primary_mass, primary_position);
+        spawn_body(
+            commands,
+            asset_server,
+            texture_cache,
+            materials,
+            sphere_mesh,
+            body,
+            soi,
+        );
     }
 }
 
@@ -198,11 +228,26 @@ fn validate_body(body: &BodyDef) -> Result<(), &'static str> {
     Ok(())
 }
 
+fn texture_handle(
+    asset_server: &AssetServer,
+    cache: &mut BodyTextureCache,
+    path: &str,
+) -> Handle<Image> {
+    cache
+        .handles
+        .entry(path.to_string())
+        .or_insert_with(|| asset_server.load(path.to_string()))
+        .clone()
+}
+
 fn spawn_body(
     commands: &mut Commands,
+    asset_server: &AssetServer,
+    texture_cache: &mut BodyTextureCache,
     materials: &mut ResMut<Assets<StandardMaterial>>,
     sphere_mesh: &Handle<Mesh>,
     def: &BodyDef,
+    soi_radius: f32,
 ) {
     let position = def.position_vec3();
     let base = def.color();
@@ -220,15 +265,30 @@ fn spawn_body(
         LinearRgba::from(atmosphere) * emissive_strength + LinearRgba::from(base) * 0.15
     };
 
-    let material = materials.add(StandardMaterial {
-        base_color: base,
+    let base_texture = def
+        .texture
+        .as_ref()
+        .map(|path| texture_handle(asset_server, texture_cache, path));
+
+    let mut material = StandardMaterial {
+        base_color: Color::WHITE,
         emissive: emissive_color,
         emissive_exposure_weight: if def.fixed { 2.5 } else { 1.2 },
         metallic: if def.probe { 0.35 } else { 0.08 },
         perceptual_roughness: if def.probe { 0.35 } else { 0.62 },
         reflectance: if def.fixed { 0.6 } else { 0.45 },
         ..default()
-    });
+    };
+    if let Some(tex) = base_texture {
+        material.base_color_texture = Some(tex);
+        if def.fixed {
+            material.unlit = true;
+        }
+    } else {
+        material.base_color = base;
+    }
+
+    let material = materials.add(material);
 
     let mut entity = commands.spawn((
         Mesh3d(sphere_mesh.clone()),
@@ -242,6 +302,7 @@ fn spawn_body(
         Velocity(def.velocity_vec3()),
         OrbitTrail::new(300),
         VisualRadius(def.radius),
+        SoiRadius(soi_radius),
     ));
 
     if def.fixed {
@@ -351,8 +412,11 @@ pub fn update_selection_visuals(
 pub fn spawn_probe(
     mut events: MessageReader<crate::resources::SpawnProbe>,
     mut commands: Commands,
+    asset_server: Res<AssetServer>,
     mut materials: ResMut<Assets<StandardMaterial>>,
+    mut texture_cache: ResMut<BodyTextureCache>,
     world_assets: Res<WorldAssets>,
+    active: Res<ActiveScenario>,
     editor: Res<EditorState>,
     bodies: Query<(&CelestialBody, &Position, &Velocity)>,
     existing_probes: Query<&CelestialBody, With<Probe>>,
@@ -382,13 +446,23 @@ pub fn spawn_probe(
         color: [0.9, 0.95, 1.0],
         emissive: 1.2,
         atmosphere: None,
+        texture: None,
+        soi_radius: None,
         fixed: false,
         probe: true,
     };
+    let primary = active.template.bodies.iter().find(|b| b.fixed);
+    let (primary_mass, primary_position) = primary
+        .map(|p| (p.mass, p.position_vec3()))
+        .unwrap_or((1.0, Vec3::ZERO));
+    let soi = compute_soi_radius_for_body(&probe_def, &active.template, primary_mass, primary_position);
     spawn_body(
         &mut commands,
+        &asset_server,
+        &mut texture_cache,
         &mut materials,
         &world_assets.sphere_mesh,
         &probe_def,
+        soi,
     );
 }

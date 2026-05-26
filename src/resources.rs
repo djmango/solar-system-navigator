@@ -1,6 +1,7 @@
 use bevy::prelude::*;
 
 use crate::scenario::Scenario;
+use crate::transfer::HohmannTransfer;
 
 #[derive(Resource, Debug, Clone)]
 pub struct PhysicsConstants {
@@ -104,6 +105,10 @@ pub struct RoutePlanner {
     pub preview_horizon: f32,
     pub preview_step: f32,
     pub show_previews: bool,
+    /// Auto-switch central body by SOI around the target vessel.
+    pub soi_auto: bool,
+    pub hohmann_target_radius: f32,
+    pub last_hohmann: Option<HohmannTransfer>,
 }
 
 impl Default for RoutePlanner {
@@ -119,6 +124,9 @@ impl Default for RoutePlanner {
             preview_horizon: 400.0,
             preview_step: 0.35,
             show_previews: false,
+            soi_auto: true,
+            hohmann_target_radius: 480.0,
+            last_hohmann: None,
         }
     }
 }
@@ -177,6 +185,11 @@ pub struct DemoRecorder {
 #[derive(Resource)]
 pub struct WorldAssets {
     pub sphere_mesh: Handle<Mesh>,
+}
+
+#[derive(Resource, Default)]
+pub struct BodyTextureCache {
+    pub handles: std::collections::HashMap<String, Handle<Image>>,
 }
 
 #[derive(Message)]
