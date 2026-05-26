@@ -89,7 +89,8 @@ pub struct ManeuverNode {
 
 impl ManeuverNode {
     pub fn delta_v_magnitude(&self) -> f32 {
-        (self.prograde * self.prograde + self.normal * self.normal + self.radial * self.radial).sqrt()
+        (self.prograde * self.prograde + self.normal * self.normal + self.radial * self.radial)
+            .sqrt()
     }
 }
 

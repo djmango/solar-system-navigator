@@ -24,9 +24,8 @@ pub fn execute_maneuver_burns(
         .map(|(c, p, v)| (c.name.clone(), p.0, v.0))
         .collect();
 
-    let Some((_, central_pos, central_vel)) = snapshot
-        .iter()
-        .find(|(name, _, _)| name == &central_name)
+    let Some((_, central_pos, central_vel)) =
+        snapshot.iter().find(|(name, _, _)| name == &central_name)
     else {
         return;
     };
@@ -49,15 +48,13 @@ pub fn execute_maneuver_burns(
             continue;
         }
 
-        let Some((_, ship_pos, ship_vel)) =
-            snapshot.iter().find(|(n, _, _)| n == &target_name)
+        let Some((_, ship_pos, ship_vel)) = snapshot.iter().find(|(n, _, _)| n == &target_name)
         else {
             continue;
         };
 
         let rel = RelativeState::new(ship_pos - central_pos, ship_vel - central_vel);
-        let rel_after =
-            orbit::apply_tnw_delta_v(rel, node.prograde, node.normal, node.radial);
+        let rel_after = orbit::apply_tnw_delta_v(rel, node.prograde, node.normal, node.radial);
         new_velocity = Some(central_vel + rel_after);
         node.executed = true;
     }

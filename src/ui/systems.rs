@@ -97,9 +97,33 @@ pub fn spawn_ui(mut commands: Commands) {
                 ..default()
             })
             .with_children(|row| {
-                spawn_slider(row, "Δv prograde: 0.5", SliderType::BurnPrograde, 0.5, -5.0, 5.0, 90.0);
-                spawn_slider(row, "Δv normal: 0.0", SliderType::BurnNormal, 0.0, -5.0, 5.0, 90.0);
-                spawn_slider(row, "Δv radial: 0.0", SliderType::BurnRadial, 0.0, -5.0, 5.0, 90.0);
+                spawn_slider(
+                    row,
+                    "Δv prograde: 0.5",
+                    SliderType::BurnPrograde,
+                    0.5,
+                    -5.0,
+                    5.0,
+                    90.0,
+                );
+                spawn_slider(
+                    row,
+                    "Δv normal: 0.0",
+                    SliderType::BurnNormal,
+                    0.0,
+                    -5.0,
+                    5.0,
+                    90.0,
+                );
+                spawn_slider(
+                    row,
+                    "Δv radial: 0.0",
+                    SliderType::BurnRadial,
+                    0.0,
+                    -5.0,
+                    5.0,
+                    90.0,
+                );
                 spawn_slider(
                     row,
                     "Burn in: 30s",

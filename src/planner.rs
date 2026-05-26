@@ -5,7 +5,9 @@ use bevy::prelude::*;
 use crate::components::{CelestialBody, FixedBody, Mass, Position, Probe, SoiRadius, Velocity};
 use crate::maneuver::reset_maneuver_execution;
 use crate::orbit::RelativeState;
-use crate::resources::{EditorState, ManeuverNode, RoutePlanner, SimulationClock, SimulationControl};
+use crate::resources::{
+    EditorState, ManeuverNode, RoutePlanner, SimulationClock, SimulationControl,
+};
 use crate::scenario::Scenario;
 use crate::soi::{self, SoiBodySnapshot};
 use crate::transfer::{self, HohmannTransfer};
@@ -103,7 +105,9 @@ pub fn compute_soi_radius_for_body(
     if def.fixed {
         return f32::INFINITY;
     }
-    let orbital_radius = (def.position_vec3() - primary_position).length().max(def.radius * 2.0);
+    let orbital_radius = (def.position_vec3() - primary_position)
+        .length()
+        .max(def.radius * 2.0);
     soi::hill_soi_radius(orbital_radius, def.mass, primary_mass) * scenario.soi_scale
 }
 

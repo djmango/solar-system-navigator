@@ -7,8 +7,8 @@ use crate::components::{
 };
 use crate::planner::{compute_soi_radius_for_body, on_simulation_reset};
 use crate::resources::{
-    ActiveScenario, BodyTextureCache, EditorState, PhysicsConstants, RoutePlanner,
-    SimulationClock, WorldAssets,
+    ActiveScenario, BodyTextureCache, EditorState, PhysicsConstants, RoutePlanner, SimulationClock,
+    WorldAssets,
 };
 use crate::scenario::{BodyDef, Scenario, load_scenario, scenario_asset_path};
 
@@ -145,11 +145,17 @@ fn spawn_starfield(
 
     let mut rng_state: u32 = 0xC0FFEE_u32;
     for _ in 0..600 {
-        rng_state = rng_state.wrapping_mul(1_664_525).wrapping_add(1_013_904_223);
+        rng_state = rng_state
+            .wrapping_mul(1_664_525)
+            .wrapping_add(1_013_904_223);
         let u = (rng_state as f32) / u32::MAX as f32;
-        rng_state = rng_state.wrapping_mul(1_664_525).wrapping_add(1_013_904_223);
+        rng_state = rng_state
+            .wrapping_mul(1_664_525)
+            .wrapping_add(1_013_904_223);
         let v = (rng_state as f32) / u32::MAX as f32;
-        rng_state = rng_state.wrapping_mul(1_664_525).wrapping_add(1_013_904_223);
+        rng_state = rng_state
+            .wrapping_mul(1_664_525)
+            .wrapping_add(1_013_904_223);
         let w = (rng_state as f32) / u32::MAX as f32;
 
         let theta = u * std::f32::consts::TAU;
@@ -455,7 +461,8 @@ pub fn spawn_probe(
     let (primary_mass, primary_position) = primary
         .map(|p| (p.mass, p.position_vec3()))
         .unwrap_or((1.0, Vec3::ZERO));
-    let soi = compute_soi_radius_for_body(&probe_def, &active.template, primary_mass, primary_position);
+    let soi =
+        compute_soi_radius_for_body(&probe_def, &active.template, primary_mass, primary_position);
     spawn_body(
         &mut commands,
         &asset_server,

@@ -241,8 +241,8 @@ mod tests {
     #[test]
     fn circular_orbit_has_low_eccentricity() {
         let mu = 1000.0;
-        let r = 100.0;
-        let v = (mu / r as f32).sqrt();
+        let r = 100.0_f32;
+        let v = (mu / r).sqrt();
         let state = RelativeState::new(Vec3::new(r, 0.0, 0.0), Vec3::new(0.0, 0.0, v));
         let elements = elements_from_state(mu, state).unwrap();
         assert!(elements.eccentricity < 0.05);

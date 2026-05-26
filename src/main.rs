@@ -9,11 +9,11 @@ mod map_view;
 mod orbit;
 mod physics;
 mod planner;
-mod soi;
-mod transfer;
 mod resources;
 mod scenario;
+mod soi;
 mod spawn;
+mod transfer;
 mod ui;
 
 use bevy::prelude::*;
@@ -21,12 +21,10 @@ use bevy::prelude::*;
 use camera::{demo_orbit_camera, focus_camera_on_selection, orbit_camera_system, spawn_camera};
 use demo::{demo_auto_exit, demo_scenario_cycler, demo_simulation_tuning};
 use input::keyboard_controls;
-use physics::orbital_physics;
 use maneuver::execute_maneuver_burns;
 use map_view::{draw_orbit_previews, map_mode_camera, toggle_map_mode};
-use planner::{
-    advance_simulation_clock, sync_route_planner_targets, update_soi_central_body,
-};
+use physics::orbital_physics;
+use planner::{advance_simulation_clock, sync_route_planner_targets, update_soi_central_body};
 use resources::{
     ActiveScenario, BodyTextureCache, DemoRecorder, MapViewMode, PhysicsConstants, ReloadScenario,
     RoutePlanner, ScenarioCatalog, SimulationClock, SimulationControl, SimulationDiagnostics,
@@ -106,13 +104,7 @@ fn main() {
             )
                 .chain(),
         )
-        .add_systems(
-            Update,
-            (
-                toggle_map_mode,
-                map_mode_camera,
-            ),
-        )
+        .add_systems(Update, (toggle_map_mode, map_mode_camera))
         .add_systems(
             Update,
             (

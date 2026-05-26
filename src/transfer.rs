@@ -94,9 +94,10 @@ mod tests {
     #[test]
     fn circular_radius_from_state() {
         let mu = 1000.0;
-        let r = 100.0;
-        let v = (mu / r as f32).sqrt();
-        let est = circular_orbit_radius(mu, Vec3::new(r, 0.0, 0.0), Vec3::new(0.0, 0.0, v)).unwrap();
+        let r = 100.0_f32;
+        let v = (mu / r).sqrt();
+        let est =
+            circular_orbit_radius(mu, Vec3::new(r, 0.0, 0.0), Vec3::new(0.0, 0.0, v)).unwrap();
         assert_relative_eq!(est, r, epsilon = 2.0);
     }
 }

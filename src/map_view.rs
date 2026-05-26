@@ -133,7 +133,8 @@ pub fn draw_orbit_previews(
     if !node_params.is_empty() {
         let horizon = planner.preview_horizon.max(50.0);
         let step = planner.preview_step.max(0.05);
-        let predicted = orbit::propagate_with_nodes(mu, rel, &node_params, clock.time, horizon, step);
+        let predicted =
+            orbit::propagate_with_nodes(mu, rel, &node_params, clock.time, horizon, step);
         draw_path_inertial(
             &mut gizmos,
             &predicted,
