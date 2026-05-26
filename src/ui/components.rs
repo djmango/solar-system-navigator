@@ -4,6 +4,9 @@ use bevy::prelude::*;
 pub enum SliderType {
     Speed,
     TicksPerFrame,
+    VelX,
+    VelY,
+    VelZ,
 }
 
 #[derive(Component)]
@@ -17,4 +20,13 @@ pub struct Slider {
 }
 
 #[derive(Component)]
-pub struct ValueText; 
+pub struct ValueText;
+
+#[derive(Component)]
+pub struct HudRoot;
+
+#[derive(Component)]
+pub struct DiagnosticsText;
+
+#[derive(Component)]
+pub struct HelpText;

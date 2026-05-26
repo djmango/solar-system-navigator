@@ -1,50 +1,68 @@
 # Solar System Navigator
 
-A lightweight Rust application for planning and browsing celestial trajectories throughout our solar system. Leveraging the [Bevy](https://bevyengine.org/) game engine, _Solar System Navigator_ renders interactive orbital simulations that help you visualize and refine spacecraft paths across various planetary bodies.
+A **3D** Rust application for visualizing and experimenting with celestial trajectories in our solar system. Built with [Bevy 0.18](https://bevy.org/), it loads multi-body scenarios from TOML, simulates N-body gravity with velocity Verlet integration, and provides an in-app editor for velocities and mission presets.
+
+> **Note:** Units are toy-scale for education, not mission operations. For real ephemerides use tools like GMAT or STK.
 
 ## Features
 
-- **Real-Time Visualization**  
-  Watch orbits update smoothly in a user-friendly 3D environment.
-  
-- **Configurable Trajectories**  
-  Adjust orbital parameters and craft flight paths with minimal effort.
-  
-- **High-Level Abstractions**  
-  Manage calculations and space mechanics with straightforward Rust data structures.
+- **3D real-time visualization** — PBR spheres, orbit trails, orbit camera (pan/zoom/rotate)
+- **Data-driven scenarios** — Add or edit bodies in `assets/**/*.toml` without recompiling
+- **Mission presets** — Inner system, simplified Apollo 11, simplified OSIRIS-REx
+- **Simulation controls** — Speed, substeps, pause, single-step, reset
+- **Trajectory editor** — Select a body (Tab), adjust velocity with sliders
+- **Probe spawning** — Launch a probe from the selected body with configurable Δv
+- **Energy diagnostics** — Live kinetic/potential/total energy readout
 
-## Getting Started
+## Controls
 
-1. Clone the repository:  
-   ```bash
-   git clone https://github.com/yourusername/solar-system-navigator.git
-   ```
-   
-2. Install Rust & Cargo:  
-   Make sure you have Rust (and its package manager, Cargo) installed.  
-   [Install Rust](https://www.rust-lang.org/tools/install)
+| Input | Action |
+|-------|--------|
+| Right-drag | Orbit camera |
+| Middle-drag | Pan |
+| Scroll / W/S | Zoom |
+| Space | Pause / resume |
+| N | Advance one step |
+| R | Reload scenario |
+| 1 / 2 / 3 | Switch preset |
+| Tab | Cycle selected body |
+| P | Spawn probe at selection |
+| [ / ] | Decrease / increase probe Δv |
+| +/- | Simulation speed |
 
-3. Build and run:  
-   ```bash
-   cd solar-system-navigator
-   cargo run
-   ```
+## Getting started
 
-## Roadmap
+```bash
+git clone http://gitea.tail38cb01.ts.net:3000/djmango/solar-system-navigator.git
+cd solar-system-navigator
+cargo run --release
+```
 
-- **Navigation**  
-  - Use your mouse and keyboard to zoom, pan, and rotate the viewpoint.
-  - Observe planetary bodies and probe trajectories as the simulation runs.
+## Project layout
 
-- **Editing Trajectories**  
-  - Tweak orbital or spacecraft parameters in the code or configuration files.
-  - Re-run the project to see updated paths.
+```
+assets/
+  scenarios/default.toml    # Sun + inner planets (toy scale)
+  missions/apollo11.toml
+  missions/osiris_rex.toml
+src/
+  physics.rs      # N-body gravity + integrator (unit tested)
+  scenario.rs     # TOML loader
+  spawn.rs        # 3D entity spawning
+  camera.rs       # Orbit camera
+  ui/             # HUD + sliders
+```
 
-- **Add Your Own Bodies**  
-  - Extend the simulation by adding extra planetary or spacecraft data.
+## Recording a demo video
 
-- **In-Sim Editing**  
-  - On-the-fly parameter adjustments for instant feedback.
+On Linux with Xvfb and ffmpeg:
 
-- **Trajectory Explorer**  
-  - Start with real trajectories of missions like Apollo 11 and Osiris-REX
+```bash
+xvfb-run -a ./scripts/record_demo.sh
+```
+
+Output: `artifacts/demo.mp4`
+
+## License
+
+Licensed under either of [Apache License 2.0](LICENSE-APACHE) or [MIT license](LICENSE-MIT) at your option.
