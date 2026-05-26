@@ -2,6 +2,7 @@
 
 use bevy::prelude::*;
 
+use crate::astro::AU;
 use crate::camera::OrbitCamera;
 use crate::components::{
     CelestialBody, FixedBody, Mass as BodyMass, Position, Probe, SoiRadius, Velocity,
@@ -10,7 +11,7 @@ use crate::orbit;
 use crate::planner::{build_soi_snapshots, relative_target_state};
 use crate::resources::{MapViewMode, PhysicsConstants, RoutePlanner, SimulationClock};
 
-const MAP_RADIUS: f32 = 1400.0;
+const MAP_RADIUS: f32 = 3.0 * AU;
 const MAP_PITCH: f32 = std::f32::consts::FRAC_PI_2 - 0.02;
 
 pub fn toggle_map_mode(
@@ -146,7 +147,7 @@ pub fn draw_orbit_previews(
             let time_offset = (node.time - clock.time).max(0.0);
             if let Some(pos) = position_at_time(&predicted, time_offset, step) {
                 let world = central.position + pos;
-                let marker = 3.0 + node.delta_v_magnitude() * 0.5;
+                let marker = 5.0e8 + node.delta_v_magnitude() * 2.0e7;
                 gizmos.sphere(world, marker, Color::srgba(1.0, 0.9, 0.2, 0.95));
             }
         }

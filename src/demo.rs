@@ -12,7 +12,7 @@ pub fn demo_simulation_tuning(
     if recorder.is_none() || *done {
         return;
     }
-    simulation.speed = 2.5;
+    simulation.speed = crate::astro::DEFAULT_TIME_WARP;
     simulation.ticks_per_frame = 4;
     simulation.paused = false;
     *done = true;

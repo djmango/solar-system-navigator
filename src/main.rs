@@ -1,5 +1,6 @@
 #![allow(clippy::type_complexity, clippy::too_many_arguments)]
 
+mod astro;
 mod camera;
 mod components;
 mod demo;

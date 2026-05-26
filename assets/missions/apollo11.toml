@@ -1,29 +1,37 @@
-name = "Apollo 11 — Earth/Moon Transfer (Simplified)"
-g = 1.0
-softening = 8.0
+# Simplified Apollo-era Earth–Moon geometry (SI). Earth fixed at origin.
+name = "Apollo 11 — Earth/Moon (SI)"
+g = 6.67430e-11
+softening = 1.0e5
+soi_scale = 1.0
+visual_exaggeration = 1.0
 
 [[bodies]]
 name = "Earth"
-mass = 8000.0
+mass = 5.97219e24
 position = [0.0, 0.0, 0.0]
 velocity = [0.0, 0.0, 0.0]
-radius = 14.0
+radius = 6.371e6
+visual_radius = 6.371e6
 color = [0.3, 0.55, 1.0]
+texture = "textures/earth.jpg"
 fixed = true
 
 [[bodies]]
 name = "Moon"
-mass = 0.12
-position = [180.0, 0.0, 0.0]
-velocity = [0.0, 0.0, 7.8]
-radius = 5.0
+mass = 7.342e22
+position = [3.844e8, 0.0, 0.0]
+velocity = [0.0, 0.0, 1022.0]
+radius = 1.737e6
+visual_radius = 1.737e6
 color = [0.75, 0.75, 0.8]
+texture = "textures/moon.jpg"
 
 [[bodies]]
 name = "CSM"
-mass = 0.02
-position = [120.0, 5.0, 0.0]
-velocity = [0.0, 0.0, 9.5]
-radius = 2.5
+mass = 2.8e4
+position = [6.571e6, 0.0, 0.0]
+velocity = [0.0, 0.0, 10800.0]
+radius = 50.0
+visual_radius = 5.0e5
 color = [0.9, 0.95, 1.0]
 probe = true

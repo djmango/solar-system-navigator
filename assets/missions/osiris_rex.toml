@@ -1,37 +1,46 @@
-name = "OSIRIS-REx — Earth/Bennu (Simplified)"
-g = 1.0
-softening = 6.0
+# Simplified OSIRIS-REx-style Sun–Earth–Bennu layout (SI, not launch-window accurate).
+name = "OSIRIS-REx — Earth/Bennu (SI)"
+g = 6.67430e-11
+softening = 1.0e8
+soi_scale = 1.0
+visual_exaggeration = 1.0
 
 [[bodies]]
 name = "Sun"
-mass = 15000.0
+mass = 1.98847e30
 position = [0.0, 0.0, 0.0]
 velocity = [0.0, 0.0, 0.0]
-radius = 20.0
+radius = 6.957e8
+visual_radius = 1.2e10
 color = [1.0, 0.85, 0.3]
+texture = "textures/sun.jpg"
 fixed = true
 
 [[bodies]]
 name = "Earth"
-mass = 1.0
-position = [400.0, 0.0, 0.0]
-velocity = [0.0, 0.0, 10.5]
-radius = 6.0
+mass = 5.97219e24
+position = [1.495978707e11, 0.0, 0.0]
+velocity = [0.0, 0.0, 29784.0]
+radius = 6.371e6
+visual_radius = 2.5e9
 color = [0.25, 0.5, 1.0]
+texture = "textures/earth.jpg"
 
 [[bodies]]
 name = "Bennu"
-mass = 0.0001
-position = [520.0, 60.0, -40.0]
-velocity = [0.0, 0.0, 9.0]
-radius = 3.0
+mass = 7.329e10
+position = [1.56e11, 0.0, 0.0]
+velocity = [0.0, 0.0, 29000.0]
+radius = 245.0
+visual_radius = 5.0e6
 color = [0.55, 0.45, 0.4]
 
 [[bodies]]
 name = "OSIRIS-REx"
-mass = 0.01
-position = [410.0, 10.0, 5.0]
-velocity = [0.0, 0.0, 10.8]
-radius = 2.0
+mass = 880.0
+position = [1.497e11, 2.0e6, 0.0]
+velocity = [0.0, 0.0, 29850.0]
+radius = 1.0
+visual_radius = 2.0e5
 color = [0.85, 0.9, 1.0]
 probe = true

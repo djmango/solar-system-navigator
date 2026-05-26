@@ -12,8 +12,8 @@ pub struct PhysicsConstants {
 impl Default for PhysicsConstants {
     fn default() -> Self {
         Self {
-            g: 1.0,
-            softening: 10.0,
+            g: crate::astro::G,
+            softening: crate::astro::DEFAULT_SOFTENING,
         }
     }
 }
@@ -29,8 +29,8 @@ pub struct SimulationControl {
 impl Default for SimulationControl {
     fn default() -> Self {
         Self {
-            speed: 1.0,
-            ticks_per_frame: 2,
+            speed: crate::astro::DEFAULT_TIME_WARP,
+            ticks_per_frame: 4,
             paused: false,
             step_once: false,
         }
@@ -118,21 +118,21 @@ impl Default for RoutePlanner {
             nodes: Vec::new(),
             central_body: None,
             target_body: None,
-            draft_prograde: 0.5,
+            draft_prograde: 500.0,
             draft_normal: 0.0,
             draft_radial: 0.0,
-            default_burn_offset: 30.0,
-            preview_horizon: 400.0,
-            preview_step: 0.35,
+            default_burn_offset: crate::astro::DAY,
+            preview_horizon: crate::astro::YEAR,
+            preview_step: 3600.0,
             show_previews: false,
             soi_auto: true,
-            hohmann_target_radius: 480.0,
+            hohmann_target_radius: crate::astro::AU * 1.524,
             last_hohmann: None,
         }
     }
 }
 
-#[derive(Resource, Debug, Clone, Default)]
+#[derive(Resource, Debug, Clone)]
 pub struct EditorState {
     pub selected_name: Option<String>,
     pub velocity_x: f32,
@@ -143,6 +143,20 @@ pub struct EditorState {
     pub velocity_dirty: bool,
     /// When true, selection just changed — sync sliders from body once.
     pub selection_changed: bool,
+}
+
+impl Default for EditorState {
+    fn default() -> Self {
+        Self {
+            selected_name: None,
+            velocity_x: 0.0,
+            velocity_y: 0.0,
+            velocity_z: 0.0,
+            probe_delta_v: 500.0,
+            velocity_dirty: false,
+            selection_changed: false,
+        }
+    }
 }
 
 #[derive(Resource, Debug, Clone)]
@@ -161,7 +175,7 @@ impl Default for ScenarioCatalog {
         Self {
             entries: vec![
                 ScenarioEntry {
-                    label: "Inner System".to_string(),
+                    label: "Inner System (SI)".to_string(),
                     path: "scenarios/default.toml".to_string(),
                 },
                 ScenarioEntry {

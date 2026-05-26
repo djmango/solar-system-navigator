@@ -13,6 +13,9 @@ pub struct Scenario {
     /// Scales auto-computed Hill SOI radii (1.0 = default).
     #[serde(default = "default_soi_scale")]
     pub soi_scale: f32,
+    /// Multiplies `radius` for mesh display when `visual_radius` is omitted.
+    #[serde(default = "default_visual_exaggeration")]
+    pub visual_exaggeration: f32,
     pub bodies: Vec<BodyDef>,
 }
 
@@ -21,11 +24,15 @@ fn default_soi_scale() -> f32 {
 }
 
 fn default_g() -> f32 {
-    1.0
+    crate::astro::G
 }
 
 fn default_softening() -> f32 {
-    10.0
+    crate::astro::DEFAULT_SOFTENING
+}
+
+fn default_visual_exaggeration() -> f32 {
+    1.0
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -34,7 +41,11 @@ pub struct BodyDef {
     pub mass: f32,
     pub position: [f32; 3],
     pub velocity: [f32; 3],
+    /// Physical radius [m] (SOI, Hill sphere).
     pub radius: f32,
+    /// Mesh display radius [m]; defaults to `radius * scenario.visual_exaggeration`.
+    #[serde(default)]
+    pub visual_radius: Option<f32>,
     pub color: [f32; 3],
     #[serde(default = "default_emissive")]
     pub emissive: f32,
@@ -71,6 +82,11 @@ impl BodyDef {
 
     pub fn atmosphere_color(&self) -> Option<Color> {
         self.atmosphere.map(|[r, g, b]| Color::srgb(r, g, b))
+    }
+
+    pub fn display_radius(&self, visual_exaggeration: f32) -> f32 {
+        self.visual_radius
+            .unwrap_or(self.radius * visual_exaggeration)
     }
 }
 

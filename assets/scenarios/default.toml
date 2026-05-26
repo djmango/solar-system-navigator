@@ -1,25 +1,53 @@
-name = "Inner Solar System (Toy Scale)"
-g = 1.0
-softening = 12.0
-soi_scale = 2.5
+# SI units: meters, kilograms, seconds. Circular coplanar orbits (mean distances).
+# Positions on +X, velocities on +Z. Not a specific ephemeris date — use GMAT/STK for ops.
+name = "Inner Solar System (SI)"
+g = 6.67430e-11
+softening = 1.0e8
+soi_scale = 1.0
+visual_exaggeration = 1.0
 
 [[bodies]]
 name = "Sun"
-mass = 12000.0
+mass = 1.98847e30
 position = [0.0, 0.0, 0.0]
 velocity = [0.0, 0.0, 0.0]
-radius = 18.0
+radius = 6.957e8
+visual_radius = 1.2e10
 color = [1.0, 0.88, 0.2]
 emissive = 2.5
 texture = "textures/sun.jpg"
 fixed = true
 
 [[bodies]]
+name = "Mercury"
+mass = 3.3011e23
+position = [5.791e10, 0.0, 0.0]
+velocity = [0.0, 0.0, 47870.0]
+radius = 2.439e6
+visual_radius = 1.8e9
+color = [0.65, 0.62, 0.58]
+emissive = 0.4
+texture = "textures/mercury.jpg"
+
+[[bodies]]
+name = "Venus"
+mass = 4.8675e24
+position = [1.082e11, 0.0, 0.0]
+velocity = [0.0, 0.0, 34790.0]
+radius = 6.052e6
+visual_radius = 2.2e9
+color = [0.95, 0.85, 0.35]
+emissive = 0.55
+atmosphere = [0.95, 0.9, 0.5]
+texture = "textures/venus.jpg"
+
+[[bodies]]
 name = "Earth"
-mass = 1.0
-position = [320.0, 0.0, 0.0]
-velocity = [0.0, 0.0, 11.5]
-radius = 6.0
+mass = 5.97219e24
+position = [1.495978707e11, 0.0, 0.0]
+velocity = [0.0, 0.0, 29784.0]
+radius = 6.371e6
+visual_radius = 2.5e9
 color = [0.25, 0.55, 1.0]
 emissive = 0.6
 atmosphere = [0.35, 0.55, 0.95]
@@ -27,22 +55,12 @@ texture = "textures/earth.jpg"
 
 [[bodies]]
 name = "Mars"
-mass = 0.55
-position = [480.0, 40.0, -30.0]
-velocity = [0.0, 0.0, 9.2]
-radius = 4.5
+mass = 6.4171e23
+position = [2.279e11, 0.0, 0.0]
+velocity = [0.0, 0.0, 24170.0]
+radius = 3.390e6
+visual_radius = 2.0e9
 color = [0.95, 0.35, 0.2]
 emissive = 0.5
 atmosphere = [0.9, 0.45, 0.25]
 texture = "textures/mars.jpg"
-
-[[bodies]]
-name = "Venus"
-mass = 0.9
-position = [220.0, -20.0, 50.0]
-velocity = [0.0, 0.0, 14.0]
-radius = 5.5
-color = [0.95, 0.85, 0.35]
-emissive = 0.55
-atmosphere = [0.95, 0.9, 0.5]
-texture = "textures/venus.jpg"

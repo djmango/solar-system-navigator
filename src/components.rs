@@ -53,6 +53,6 @@ pub struct VisualRadius(pub f32);
 #[derive(Component)]
 pub struct Starfield;
 
-/// Patched-conics SOI radius for map/planner (toy units).
+/// Patched-conics SOI radius for map/planner [m].
 #[derive(Component, Clone, Copy)]
 pub struct SoiRadius(pub f32);

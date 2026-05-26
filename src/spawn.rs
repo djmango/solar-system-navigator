@@ -160,7 +160,7 @@ fn spawn_starfield(
 
         let theta = u * std::f32::consts::TAU;
         let phi = (v * 2.0 - 1.0).acos();
-        let radius = 6_000.0 + w * 4_000.0;
+        let radius = 40.0 * crate::astro::AU + w * 20.0 * crate::astro::AU;
         let position = Vec3::new(
             radius * phi.sin() * theta.cos(),
             radius * phi.cos(),
@@ -220,6 +220,7 @@ fn spawn_bodies(
             sphere_mesh,
             body,
             soi,
+            scenario.visual_exaggeration,
         );
     }
 }
@@ -258,6 +259,7 @@ fn spawn_body(
     sphere_mesh: &Handle<Mesh>,
     def: &BodyDef,
     soi_radius: f32,
+    visual_exaggeration: f32,
 ) {
     let position = def.position_vec3();
     let base = def.color();
@@ -275,14 +277,16 @@ fn spawn_body(
         LinearRgba::from(atmosphere) * emissive_strength + LinearRgba::from(base) * 0.15
     };
 
-    let base_texture = def.texture.as_ref().filter(|path| texture_asset_exists(path)).map(
-        |path| {
+    let base_texture = def
+        .texture
+        .as_ref()
+        .filter(|path| texture_asset_exists(path))
+        .map(|path| {
             if !texture_cache.handles.contains_key(path) {
                 info!("Loading texture: {path}");
             }
             texture_handle(asset_server, texture_cache, path)
-        },
-    );
+        });
 
     let mut material = StandardMaterial {
         base_color: Color::WHITE,
@@ -309,11 +313,12 @@ fn spawn_body(
     }
 
     let material = materials.add(material);
+    let display_r = def.display_radius(visual_exaggeration);
 
     let mut entity = commands.spawn((
         Mesh3d(sphere_mesh.clone()),
         MeshMaterial3d(material),
-        Transform::from_translation(position).with_scale(Vec3::splat(def.radius)),
+        Transform::from_translation(position).with_scale(Vec3::splat(display_r)),
         CelestialBody {
             name: def.name.clone(),
         },
@@ -321,7 +326,7 @@ fn spawn_body(
         Position(position),
         Velocity(def.velocity_vec3()),
         OrbitTrail::new(300),
-        VisualRadius(def.radius),
+        VisualRadius(display_r),
         SoiRadius(soi_radius),
     ));
 
@@ -462,7 +467,8 @@ pub fn spawn_probe(
         mass: 0.01,
         position: position.0.to_array(),
         velocity: (velocity.0 + Vec3::new(editor.probe_delta_v, 0.0, 0.0)).to_array(),
-        radius: 2.0,
+        radius: 5.0,
+        visual_radius: Some(2.0e5),
         color: [0.9, 0.95, 1.0],
         emissive: 1.2,
         atmosphere: None,
@@ -485,5 +491,6 @@ pub fn spawn_probe(
         &world_assets.sphere_mesh,
         &probe_def,
         soi,
+        active.template.visual_exaggeration,
     );
 }

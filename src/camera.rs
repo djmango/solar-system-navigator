@@ -1,6 +1,7 @@
 use bevy::input::mouse::{MouseMotion, MouseWheel};
 use bevy::prelude::*;
 
+use crate::astro::AU;
 use crate::components::{CelestialBody, Position};
 use crate::resources::{EditorState, MapViewMode};
 
@@ -18,11 +19,11 @@ impl Default for OrbitCamera {
     fn default() -> Self {
         Self {
             focus: Vec3::ZERO,
-            radius: 700.0,
+            radius: 2.5 * AU,
             yaw: 0.7,
             pitch: 0.4,
-            min_radius: 100.0,
-            max_radius: 2500.0,
+            min_radius: 1.0e9,
+            max_radius: 50.0 * AU,
         }
     }
 }
@@ -102,6 +103,8 @@ pub fn orbit_camera_system(
         return;
     };
 
+    let pan_scale = (orbit.radius * 0.002).max(1.0e6);
+
     let rotating =
         mouse_button.pressed(MouseButton::Right) || mouse_button.pressed(MouseButton::Middle);
 
@@ -113,7 +116,8 @@ pub fn orbit_camera_system(
         } else if mouse_button.pressed(MouseButton::Middle) {
             let right = *transform.right();
             let up = *transform.up();
-            orbit.focus += right * -event.delta.x * 0.35 + up * event.delta.y * 0.35;
+            orbit.focus +=
+                right * -event.delta.x * pan_scale * 0.001 + up * event.delta.y * pan_scale * 0.001;
         }
     }
 

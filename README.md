@@ -2,7 +2,7 @@
 
 A **3D** Rust application for visualizing and experimenting with celestial trajectories in our solar system. Built with [Bevy 0.18](https://bevy.org/), it loads multi-body scenarios from TOML, simulates N-body gravity with velocity Verlet integration, and provides an in-app editor for velocities and mission presets.
 
-> **Note:** Units are toy-scale for education, not mission operations. For real ephemerides use tools like GMAT or STK.
+> **Units:** SI — meters, kilograms, seconds (`G = 6.67430×10⁻¹¹`). Orbits use circular, coplanar, mean-distance states (not a specific ephemeris date). For mission-grade ephemerides use [GMAT](https://gmat.sourceforge.io/) or STK. Planet **mesh size** is exaggerated via `visual_radius` so bodies remain visible at true orbital scale.
 
 ## Features
 

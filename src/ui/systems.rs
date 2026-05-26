@@ -1,6 +1,7 @@
 use bevy::input::mouse::MouseButton;
 use bevy::prelude::*;
 
+use crate::astro::{self, AU};
 use crate::resources::{
     ActiveScenario, EditorState, MapViewMode, RoutePlanner, SimulationClock, SimulationControl,
     SimulationDiagnostics,
@@ -58,19 +59,27 @@ pub fn spawn_ui(mut commands: Commands) {
                 ..default()
             })
             .with_children(|row| {
-                spawn_slider(row, "Speed: 1.0x", SliderType::Speed, 1.0, 0.1, 8.0, 22.0);
                 spawn_slider(
                     row,
-                    "Substeps: 2",
-                    SliderType::TicksPerFrame,
-                    2.0,
+                    "Speed: 50000x",
+                    SliderType::Speed,
+                    astro::DEFAULT_TIME_WARP,
                     1.0,
-                    12.0,
+                    500_000.0,
+                    90.0,
+                );
+                spawn_slider(
+                    row,
+                    "Substeps: 4",
+                    SliderType::TicksPerFrame,
+                    4.0,
+                    1.0,
+                    16.0,
                     18.0,
                 );
-                spawn_slider(row, "Vel X: 0.0", SliderType::VelX, 0.0, -20.0, 20.0, 100.0);
-                spawn_slider(row, "Vel Y: 0.0", SliderType::VelY, 0.0, -20.0, 20.0, 100.0);
-                spawn_slider(row, "Vel Z: 0.0", SliderType::VelZ, 0.0, -20.0, 20.0, 100.0);
+                spawn_slider(row, "Vel X: 0", SliderType::VelX, 0.0, -40_000.0, 40_000.0, 90.0);
+                spawn_slider(row, "Vel Y: 0", SliderType::VelY, 0.0, -40_000.0, 40_000.0, 90.0);
+                spawn_slider(row, "Vel Z: 0", SliderType::VelZ, 0.0, -40_000.0, 40_000.0, 90.0);
             });
 
             root.spawn((
@@ -99,29 +108,29 @@ pub fn spawn_ui(mut commands: Commands) {
             .with_children(|row| {
                 spawn_slider(
                     row,
-                    "Δv prograde: 0.5",
+                    "Δv prograde: 500",
                     SliderType::BurnPrograde,
-                    0.5,
-                    -5.0,
-                    5.0,
+                    500.0,
+                    -5000.0,
+                    5000.0,
                     90.0,
                 );
                 spawn_slider(
                     row,
-                    "Δv normal: 0.0",
+                    "Δv normal: 0",
                     SliderType::BurnNormal,
                     0.0,
-                    -5.0,
-                    5.0,
+                    -5000.0,
+                    5000.0,
                     90.0,
                 );
                 spawn_slider(
                     row,
-                    "Δv radial: 0.0",
+                    "Δv radial: 0",
                     SliderType::BurnRadial,
                     0.0,
-                    -5.0,
-                    5.0,
+                    -5000.0,
+                    5000.0,
                     90.0,
                 );
                 spawn_slider(
@@ -135,11 +144,11 @@ pub fn spawn_ui(mut commands: Commands) {
                 );
                 spawn_slider(
                     row,
-                    "Hohmann r: 480",
+                    "Hohmann r (AU)",
                     SliderType::HohmannTargetRadius,
-                    480.0,
-                    80.0,
-                    900.0,
+                    AU * 1.524,
+                    0.3 * AU,
+                    5.0 * AU,
                     120.0,
                 );
             });
@@ -225,15 +234,13 @@ pub fn update_hud_text(
     };
     let selected = editor.selected_name.as_deref().unwrap_or("(none)");
     **text = format!(
-        "Scenario: {} | Speed: {:.1}x | Substeps: {} | Paused: {} | Bodies: {} | E_total: {:.2} (KE {:.2} + PE {:.2}) | Selected: {} | Probe Δv: {:.1}",
+        "Scenario: {} | SI (m, kg, s) | Warp: {:.0}x | Substeps: {} | Paused: {} | Bodies: {} | E: {:.3e} J | Selected: {} | Probe Δv: {:.0} m/s",
         active.name,
         simulation.speed,
         simulation.ticks_per_frame,
         simulation.paused,
         diagnostics.body_count,
         diagnostics.total_energy,
-        diagnostics.kinetic_energy,
-        diagnostics.potential_energy,
         selected,
         editor.probe_delta_v,
     );
@@ -409,7 +416,7 @@ pub fn ui_system(
         for (mut text, text_slider_type) in &mut value_texts {
             if *text_slider_type == slider_type {
                 **text = match slider_type {
-                    SliderType::Speed => format!("Speed: {:.1}x", value),
+                    SliderType::Speed => format!("Warp: {:.0}", value),
                     SliderType::TicksPerFrame => format!("Substeps: {}", value as u32),
                     SliderType::VelX => format!("Vel X: {value:.1}"),
                     SliderType::VelY => format!("Vel Y: {value:.1}"),
@@ -418,7 +425,9 @@ pub fn ui_system(
                     SliderType::BurnNormal => format!("Δv normal: {value:.2}"),
                     SliderType::BurnRadial => format!("Δv radial: {value:.2}"),
                     SliderType::BurnTimeOffset => format!("Burn in: {value:.0}s"),
-                    SliderType::HohmannTargetRadius => format!("Hohmann r: {value:.0}"),
+                    SliderType::HohmannTargetRadius => {
+                        format!("Hohmann r: {:.3} AU", value / AU)
+                    }
                 };
             }
         }

@@ -80,10 +80,10 @@ pub fn keyboard_controls(
         planner.default_burn_offset += 5.0;
     }
     if keyboard.just_pressed(KeyCode::Equal) || keyboard.just_pressed(KeyCode::NumpadAdd) {
-        simulation.speed = (simulation.speed + 0.25).min(8.0);
+        simulation.speed = (simulation.speed * 1.25).min(1.0e6);
     }
     if keyboard.just_pressed(KeyCode::Minus) || keyboard.just_pressed(KeyCode::NumpadSubtract) {
-        simulation.speed = (simulation.speed - 0.25).max(0.1);
+        simulation.speed = (simulation.speed / 1.25).max(1.0);
     }
     if keyboard.just_pressed(KeyCode::Digit1) {
         switch_scenario(&mut active, &catalog, 0);
@@ -101,10 +101,10 @@ pub fn keyboard_controls(
         spawn_probe_events.write(SpawnProbe);
     }
     if keyboard.just_pressed(KeyCode::BracketLeft) {
-        editor.probe_delta_v -= 0.5;
+        editor.probe_delta_v -= 50.0;
     }
     if keyboard.just_pressed(KeyCode::BracketRight) {
-        editor.probe_delta_v += 0.5;
+        editor.probe_delta_v += 50.0;
     }
 
     cycle_selection(&keyboard, &mut editor, &bodies);
