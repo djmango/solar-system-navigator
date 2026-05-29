@@ -33,7 +33,8 @@ impl Default for SimulationControl {
         Self {
             speed: crate::astro::DEFAULT_TIME_WARP,
             ticks_per_frame: 4,
-            paused: true,
+            // Desktop starts paused so you can set up burns; web auto-runs on load.
+            paused: !cfg!(target_arch = "wasm32"),
             step_once: false,
         }
     }

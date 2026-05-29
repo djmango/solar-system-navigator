@@ -5,7 +5,7 @@
     "build": "bash scripts/cloudflare-pages-build.sh",
     "deploy": "wrangler deploy",
     "compress-wasm": "node scripts/compress-wasm-brotli.mjs",
-    "serve": "unset NO_COLOR; trunk serve --release --no-default-features --features web",
+    "serve": "bash -c 'compgen -G \"assets/textures/*.jpg\" >/dev/null || ./scripts/fetch_textures.sh; unset NO_COLOR; trunk serve --release --no-default-features --features web'",
     "serve:dist": "npx --yes serve dist -p 8080"
   },
   "devDependencies": {

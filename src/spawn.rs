@@ -262,7 +262,16 @@ fn validate_body(body: &BodyDef) -> Result<(), &'static str> {
 }
 
 fn texture_asset_exists(relative: &str) -> bool {
-    std::path::Path::new("assets").join(relative).is_file()
+    #[cfg(target_arch = "wasm32")]
+    {
+        let _ = relative;
+        // Assets are fetched via AssetServer from /assets/; no local filesystem on WASM.
+        true
+    }
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        std::path::Path::new("assets").join(relative).is_file()
+    }
 }
 
 fn texture_handle(
