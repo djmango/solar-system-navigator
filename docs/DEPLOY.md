@@ -32,7 +32,7 @@ Cloudflare runs **two steps** on each push: **build** then **deploy**. Fill in b
 
 **Non-production branch deploy command** (previews): `npx wrangler deploy`
 
-The build step writes WASM + assets to `dist/`; deploy uploads them via `[assets]` in `wrangler.toml`.
+The build step writes WASM + assets to `dist/`; **Brotli compression** then replaces `*_bg.wasm` with `*.wasm.br` (typically ~10 MiB vs ~36 MiB raw) so Cloudflare’s **25 MiB per-file** upload limit is satisfied. The browser loads `.wasm.br` via `wasm-brotli-shim.js` (no feature cuts).
 
 4. **Environment variables** (optional):
 

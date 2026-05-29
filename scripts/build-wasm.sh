@@ -22,4 +22,6 @@ rustup target add wasm32-unknown-unknown 2>/dev/null || true
 echo "Building WASM (profile wasm-release, features web + WebGPU)…"
 trunk build --release --no-default-features --features web
 
+node scripts/compress-wasm-brotli.mjs dist
+
 echo "Done. Open dist/index.html via trunk serve, or: npx wrangler deploy"

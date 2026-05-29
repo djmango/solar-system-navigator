@@ -30,4 +30,6 @@ fi
 unset NO_COLOR
 trunk build --release --no-default-features --features web
 
+node scripts/compress-wasm-brotli.mjs dist
+
 echo "Pages build complete: dist/ ($(du -sh dist | cut -f1))"

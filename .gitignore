@@ -22,6 +22,9 @@
 /site/
 /site/
 
+# Node (Wrangler / brotli packaging)
+/node_modules/
+
 # Bevy specific
 assets/.DS_Store
 

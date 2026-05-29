@@ -102,5 +102,9 @@ jobs:
         run: chmod +x scripts/fetch_textures.sh && ./scripts/fetch_textures.sh
       - name: Install trunk
         run: cargo install trunk --locked
+      - name: Install Node deps (brotli + esbuild)
+        run: npm ci
       - name: trunk build
         run: trunk build --release --no-default-features --features web
+      - name: Brotli-compress WASM for Cloudflare
+        run: node scripts/compress-wasm-brotli.mjs dist
