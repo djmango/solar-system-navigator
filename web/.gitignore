@@ -1,0 +1,4 @@
+# WASM module (built by wasm-pack)
+/src/sim/pkg/
+
+/node_modules/

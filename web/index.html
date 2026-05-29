@@ -1,85 +1,17 @@
 <!DOCTYPE html>
 <html lang="en">
-<head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Solar System Navigator</title>
-  <meta name="description" content="3D N-body solar system simulation in the browser (Rust + Bevy + WebGPU)." />
-  <link rel="icon" href="favicon.svg" type="image/svg+xml" />
-  <style>
-    html, body {
-      margin: 0;
-      padding: 0;
-      width: 100%;
-      height: 100%;
-      overflow: hidden;
-      background: #06070c;
-      color: #e8ecf4;
-      font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
-    }
-    #loading {
-      position: fixed;
-      inset: 0;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      gap: 1rem;
-      background: radial-gradient(ellipse at 30% 0%, #1a2040 0%, #06070c 55%);
-      z-index: 10;
-      transition: opacity 0.4s ease;
-    }
-    #loading.hidden {
-      opacity: 0;
-      pointer-events: none;
-    }
-    #loading p { margin: 0; color: #9aa3b5; max-width: 28rem; text-align: center; line-height: 1.5; }
-    #loading h1 { margin: 0; font-size: 1.5rem; font-weight: 600; }
-    .spinner {
-      width: 2.5rem;
-      height: 2.5rem;
-      border: 3px solid #252a38;
-      border-top-color: #6eb5ff;
-      border-radius: 50%;
-      animation: spin 0.9s linear infinite;
-    }
-    @keyframes spin { to { transform: rotate(360deg); } }
-    #error {
-      display: none;
-      color: #ffb86c;
-      max-width: 32rem;
-      text-align: center;
-      padding: 0 1rem;
-    }
-    canvas { display: block; width: 100%; height: 100%; }
-  </style>
-  <link data-trunk rel="rust" href="../Cargo.toml" data-target-name="solar_system_navigator" data-cargo-features="web" data-cargo-args="--lib --profile wasm-release" data-wasm-opt="z" />
-  <link data-trunk rel="copy-dir" href="../assets" />
-  <link data-trunk rel="copy-file" href="favicon.svg" />
-  <link data-trunk rel="copy-file" href="../deploy/cloudflare/_redirects" />
-  <link data-trunk rel="copy-file" href="../deploy/cloudflare/_headers" />
-</head>
-<body>
-  <div id="loading">
-    <h1>Solar System Navigator</h1>
-    <div class="spinner" aria-hidden="true"></div>
-    <p id="status">Loading WASM… (WebGPU required)</p>
-    <p id="error"></p>
-  </div>
-  <script type="module">
-    if (!navigator.gpu) {
-      const err = document.getElementById('error');
-      err.style.display = 'block';
-      err.textContent =
-        'WebGPU is not available in this browser. Try Chrome/Edge 113+ or Firefox Nightly with WebGPU enabled.';
-      document.getElementById('status').textContent = 'Cannot start';
-      document.querySelector('.spinner')?.remove();
-    } else {
-      window.addEventListener('TrunkApplicationStarted', () => {
-        const el = document.getElementById('loading');
-        if (el) el.classList.add('hidden');
-      });
-    }
-  </script>
-</body>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <title>Solar System Navigator</title>
+    <meta
+      name="description"
+      content="3D N-body solar system mission planner — Rust physics, Three.js visualization."
+    />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
 </html>

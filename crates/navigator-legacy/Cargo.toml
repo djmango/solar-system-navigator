@@ -1,0 +1,35 @@
+[package]
+name = "navigator-legacy"
+description = "Legacy Bevy desktop/WASM app (preserved for reference)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+name = "solar_system_navigator"
+path = "src/lib.rs"
+
+[[bin]]
+name = "solar-system-navigator"
+path = "src/main.rs"
+required-features = ["native"]
+
+[features]
+default = ["native"]
+native = []
+web = ["bevy/web", "bevy/webgl2"]
+
+[dependencies]
+bevy = { version = "0.18", default-features = false, features = ["3d", "jpeg", "png"] }
+serde = { workspace = true }
+toml = { workspace = true }
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+getrandom = { workspace = true }
+wasm-bindgen = { workspace = true }
+console_error_panic_hook = { workspace = true }
+
+[dev-dependencies]
+approx = { workspace = true }

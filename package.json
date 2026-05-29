@@ -3,14 +3,13 @@
   "private": true,
   "scripts": {
     "build": "bash scripts/cloudflare-pages-build.sh",
+    "build:legacy": "bash -c 'unset NO_COLOR; trunk build --release --no-default-features --features web -p navigator-legacy'",
     "deploy": "wrangler deploy",
-    "compress-wasm": "node scripts/compress-wasm-brotli.mjs",
-    "serve": "bash -c 'compgen -G \"assets/textures/*.jpg\" >/dev/null || ./scripts/fetch_textures.sh; unset NO_COLOR; trunk serve --release --no-default-features --features web'",
+    "dev": "cd web && npm run dev",
+    "dev:legacy": "bash -c 'compgen -G \"assets/textures/*.jpg\" >/dev/null || ./scripts/fetch_textures.sh; unset NO_COLOR; trunk serve --release --no-default-features --features web -p navigator-legacy'",
     "serve:dist": "npx --yes serve dist -p 8080"
   },
   "devDependencies": {
-    "brotli": "^1.3.3",
-    "esbuild": "^0.25.12",
     "wrangler": "^4.24.0"
   }
 }

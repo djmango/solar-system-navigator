@@ -1,9 +1,8 @@
-# https://solar.skg.gg — WASM game at / (static assets on Workers)
+# https://solar.skg.gg — React + Three.js mission planner at /
 #
 # Cloudflare Workers Builds (Connect to Git):
 #   Build command:  bash scripts/cloudflare-pages-build.sh
 #   Deploy command: npx wrangler deploy
-#   Root directory: (empty)
 #
 # Worker name must match the Cloudflare dashboard project name exactly.
 

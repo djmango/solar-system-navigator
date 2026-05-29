@@ -1,9 +1,7 @@
-# WASM + Brotli (client-side decompress via wasm-brotli-shim.js)
-/*.wasm.br
+# WASM (sim-wasm via wasm-pack)
+/*.wasm
+  Content-Type: application/wasm
   Cache-Control: public, max-age=31536000, immutable
 
-/brotli-decode.mjs
-  Cache-Control: public, max-age=31536000, immutable
-
-/wasm-brotli-shim.js
-  Cache-Control: public, max-age=31536000, immutable
+/assets/*
+  Cache-Control: public, max-age=86400

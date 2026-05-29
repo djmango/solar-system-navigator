@@ -57,13 +57,55 @@ fn fetch_textures(root: &Path) {
     }
 }
 
-fn main() {
-    if std::env::var("CARGO_CFG_TARGET_ARCH").ok().as_deref() == Some("wasm32") {
-        println!("cargo:warning=WASM build — skipping texture fetch (bundle assets/ for Trunk)");
-        return;
+const MIN_TEXTURE_BYTES: u64 = 4096;
+
+fn emit_wasm_texture_manifest(root: &Path) {
+    let textures_dir = root.join("assets/textures");
+    println!("cargo:rerun-if-changed=assets/textures");
+
+    let mut bundled = Vec::new();
+    if textures_dir.is_dir() {
+        if let Ok(entries) = std::fs::read_dir(&textures_dir) {
+            for entry in entries.flatten() {
+                let path = entry.path();
+                if path.extension().and_then(|e| e.to_str()) != Some("jpg") {
+                    continue;
+                }
+                let Ok(meta) = entry.metadata() else {
+                    continue;
+                };
+                if meta.len() < MIN_TEXTURE_BYTES {
+                    continue;
+                }
+                if let Some(name) = path.file_name().and_then(|n| n.to_str()) {
+                    bundled.push(format!("textures/{name}"));
+                }
+            }
+        }
     }
 
+    bundled.sort();
+    println!(
+        "cargo:rustc-env=SOLAR_BUNDLED_TEXTURES={}",
+        bundled.join(",")
+    );
+    if bundled.is_empty() {
+        println!("cargo:warning=WASM build: no planet textures bundled (solid-color fallback)");
+    } else {
+        println!(
+            "cargo:warning=WASM build: bundled {} planet texture(s)",
+            bundled.len()
+        );
+    }
+}
+
+fn main() {
     let root = manifest_dir();
+
+    if std::env::var("CARGO_CFG_TARGET_ARCH").ok().as_deref() == Some("wasm32") {
+        emit_wasm_texture_manifest(&root);
+        return;
+    }
 
     println!("cargo:rerun-if-changed=scripts/fetch_textures.sh");
     println!("cargo:rerun-if-changed=assets/scenarios/");

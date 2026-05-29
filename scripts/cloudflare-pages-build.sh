@@ -1,11 +1,10 @@
 #!/usr/bin/env bash
-# Cloudflare Pages build: Rust + Trunk → dist/ (game at site root).
+# Cloudflare Workers build: Rust WASM + Vite/React → dist/
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
-export SOLAR_TEXTURE_RES="${SOLAR_TEXTURE_RES:-2k}"
 export RUSTUP_HOME="${RUSTUP_HOME:-$HOME/.cargo}"
 export CARGO_HOME="${CARGO_HOME:-$HOME/.cargo}"
 
@@ -20,16 +19,34 @@ rustup toolchain install 1.95 --profile minimal 2>/dev/null || true
 rustup default 1.95
 rustup target add wasm32-unknown-unknown
 
-if ! command -v trunk >/dev/null 2>&1; then
-  echo "Installing trunk…"
-  cargo install trunk --locked
+if ! command -v wasm-pack >/dev/null 2>&1; then
+  echo "Installing wasm-pack…"
+  cargo install wasm-pack --locked
 fi
 
-./scripts/fetch_textures.sh
+# Optional textures for /assets/textures (solid colors used if missing).
+CI= GITHUB_ACTIONS= ./scripts/fetch_textures.sh || true
+for tex in assets/textures/*.jpg; do
+  if [ -f "$tex" ] && [ "$(wc -c <"$tex")" -lt 4096 ]; then
+    echo "Removing placeholder texture $(basename "$tex")"
+    rm -f "$tex"
+  fi
+done
 
-unset NO_COLOR
-trunk build --release --no-default-features --features web
+cd web
+if [ ! -d node_modules ]; then
+  npm ci
+fi
+npm run build
+cd "$ROOT"
 
-node scripts/compress-wasm-brotli.mjs dist
+# Static assets + Cloudflare headers
+mkdir -p dist/assets
+cp -R assets/scenarios assets/missions dist/assets/ 2>/dev/null || true
+if compgen -G "assets/textures/*.jpg" >/dev/null; then
+  mkdir -p dist/assets/textures
+  cp assets/textures/*.jpg dist/assets/textures/ 2>/dev/null || true
+fi
+cp deploy/cloudflare/_headers deploy/cloudflare/_redirects dist/ 2>/dev/null || true
 
-echo "Pages build complete: dist/ ($(du -sh dist | cut -f1))"
+echo "Build complete: dist/ ($(du -sh dist | cut -f1))"
