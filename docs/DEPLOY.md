@@ -1,13 +1,13 @@
 # Deploying Solar System Navigator
 
-This project is a **native 3D desktop app** (Bevy + Vulkan/OpenGL). It does **not** run inside a browser today unless you port it to **WASM/WebGPU** (possible later, non-trivial).
+This project ships as a **native desktop app** (Bevy + Vulkan) and an experimental **browser build** (WASM + WebGPU via Trunk).
 
 For **https://solar.skg.gg** you typically combine:
 
 | Goal | Approach |
 |------|----------|
 | Public info + downloads | Static site (Cloudflare Pages or Proxmox + Caddy) |
-| Run the sim in the browser | WASM build (not shipped yet) |
+| Run the sim in the browser | WASM build → `dist/` (see Option D + Wrangler below) |
 | Run on your own PC | Linux/Windows release bundle |
 
 ---
@@ -137,11 +137,46 @@ unset NO_COLOR   # trunk 0.21+ conflicts with NO_COLOR=1 in some CI shells
 trunk serve --no-default-features --features web --open
 ```
 
-**Cloudflare Pages**
+**Cloudflare Pages + Wrangler**
 
-1. Build command: `./scripts/build-wasm.sh` (or `trunk build --no-default-features --features web`)
-2. Output directory: `dist`
-3. Point `solar.skg.gg` (or a `/play` path) at that deployment
+You are ready to deploy once the WASM branch is merged (or build locally and upload).
+
+| Deploy | Output dir | URL layout |
+|--------|------------|------------|
+| Play only | `dist/` | App at `/` |
+| Landing + play | `site/` from `./scripts/assemble-site.sh` | Landing `/`, WASM `/play/` |
+
+**A — Dashboard (Git-connected Pages)**
+
+1. Workers & Pages → Create → Connect to `djmango/solar-system-navigator`
+2. Production branch: `master` (after WASM PR merges)
+3. **Build command:** `bash scripts/cloudflare-pages-build.sh`
+4. **Build output directory:** `dist`
+5. Custom domain: `solar.skg.gg` or `play.solar.skg.gg`
+6. Environment variable (optional): `SOLAR_TEXTURE_RES=2k`
+
+First build may take **15–25 minutes** (Rust + Trunk). If Pages times out, use option B.
+
+**B — Wrangler CLI (pre-built `dist/`, recommended for first deploy)**
+
+```bash
+./scripts/build-wasm.sh
+npx wrangler login
+npx wrangler pages project create solar-play --production-branch master
+npx wrangler pages deploy dist --project-name=solar-play
+```
+
+Add custom domain in the Cloudflare dashboard for the Pages project.
+
+**C — Landing + WASM on one domain**
+
+```bash
+./scripts/build-wasm.sh
+./scripts/assemble-site.sh
+npx wrangler pages deploy site --project-name=solar
+```
+
+Repo includes `wrangler.toml` (`pages_build_output_dir = "dist"`).
 
 **Notes**
 
@@ -165,8 +200,8 @@ Linux needs Vulkan or Mesa (same as dev). First launch downloads planet textures
 
 ## Quick checklist for `solar.skg.gg`
 
-1. [ ] Build: `./scripts/build-release.sh && ./scripts/package-release.sh`
-2. [ ] Copy `deploy/landing/*` + tarball to `/var/www/solar.skg.gg`
-3. [ ] Caddy or nginx + TLS
-4. [ ] DNS `solar` → server or Cloudflare Tunnel
-5. [ ] Test download link and run binary on a clean machine
+1. [ ] WASM: `./scripts/build-wasm.sh` → `wrangler pages deploy dist` (or Pages CI build)
+2. [ ] Native: `./scripts/build-release.sh && ./scripts/package-release.sh`
+3. [ ] Optional: `./scripts/assemble-site.sh` for landing at `/` + play at `/play/`
+4. [ ] DNS `solar` → Pages or Proxmox / Tunnel
+5. [ ] Test WebGPU in Chrome and Linux download link

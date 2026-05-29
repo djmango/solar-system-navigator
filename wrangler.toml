@@ -1,0 +1,12 @@
+# Cloudflare Pages — WASM + WebGPU app (Trunk output in dist/)
+# https://developers.cloudflare.com/pages/
+#
+# Deploy pre-built output:
+#   ./scripts/build-wasm.sh
+#   npx wrangler pages deploy dist --project-name=solar-play
+#
+# Or connect this repo in the dashboard and use scripts/cloudflare-pages-build.sh
+
+name = "solar-play"
+compatibility_date = "2025-05-01"
+pages_build_output_dir = "dist"
