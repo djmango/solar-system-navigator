@@ -7,7 +7,7 @@ use crate::maneuver::{self, ManeuverNode};
 use crate::orbit::{self, RelativeState};
 use crate::physics::{BodyState, total_energy};
 use crate::planner::{self, compute_soi_radius_for_body};
-use crate::scenario::{load_scenario_from_str, Scenario, DEFAULT_SCENARIO};
+use crate::scenario::{DEFAULT_SCENARIO, Scenario, load_scenario_from_str};
 use crate::soi::{self, SoiBodySnapshot};
 use crate::transfer::HohmannTransfer;
 use crate::truth::{self, build_truth_paths_for_scenario, predict_target_path_nbody};
@@ -185,9 +185,7 @@ impl Simulation {
         let Some(path) = self.truth_paths.get(name) else {
             return Vec::new();
         };
-        path.iter()
-            .flat_map(|p| [p.x, p.y, p.z])
-            .collect()
+        path.iter().flat_map(|p| [p.x, p.y, p.z]).collect()
     }
 
     pub fn soi_snapshots(&self) -> Vec<SoiBodySnapshot> {
@@ -275,11 +273,7 @@ impl Simulation {
     }
 
     fn update_diagnostics(&mut self) {
-        let (ke, pe) = total_energy(
-            &self.states,
-            self.scenario.g,
-            self.scenario.softening,
-        );
+        let (ke, pe) = total_energy(&self.states, self.scenario.g, self.scenario.softening);
         self.diagnostics = SimDiagnostics {
             kinetic_energy: ke,
             potential_energy: pe,
@@ -416,12 +410,7 @@ impl Simulation {
         let mut out = Vec::with_capacity(n * 4);
         for i in 0..n {
             let t = self.sim_time + (i as f64 / n as f64) * period;
-            out.extend_from_slice(&[
-                t,
-                flat[3 * i],
-                flat[3 * i + 1],
-                flat[3 * i + 2],
-            ]);
+            out.extend_from_slice(&[t, flat[3 * i], flat[3 * i + 1], flat[3 * i + 2]]);
         }
         out
     }
@@ -458,7 +447,8 @@ impl Simulation {
         }
         let central = self.planner.central_body.clone()?;
         let target = self.planner.target_body.clone()?;
-        let horizon = (ut - self.sim_time + self.planner.preview_step * 2.0).max(self.planner.preview_step);
+        let horizon =
+            (ut - self.sim_time + self.planner.preview_step * 2.0).max(self.planner.preview_step);
         let path = predict_target_path_nbody(
             &self.states,
             &central,
@@ -629,9 +619,7 @@ impl Simulation {
             self.scenario.g,
             self.scenario.softening,
         );
-        path.iter()
-            .flat_map(|p| [p.x, p.y, p.z])
-            .collect()
+        path.iter().flat_map(|p| [p.x, p.y, p.z]).collect()
     }
 
     pub fn relative_target_state(&self) -> Option<RelativeState> {
@@ -653,10 +641,7 @@ impl Simulation {
             .unwrap_or("Sun");
         let central = self.states.iter().find(|s| s.name == central_name);
         let (pos, vel, mu) = if let Some(c) = central {
-            let rel = RelativeState::new(
-                state.position - c.position,
-                state.velocity - c.velocity,
-            );
+            let rel = RelativeState::new(state.position - c.position, state.velocity - c.velocity);
             (rel.position, rel.velocity, self.scenario.g * c.mass)
         } else {
             (

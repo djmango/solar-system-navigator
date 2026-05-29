@@ -34,7 +34,12 @@ pub fn compute_hohmann_for_target(
     let target = soi::find_body(snapshots, target_name)?;
     let mu = physics_g * central.mass;
     let rel = soi::relative_state_to_central(target.position, target.velocity, central);
-    transfer::hohmann_circular(mu, transfer::circular_orbit_radius(mu, rel.position, rel.velocity)?, hohmann_target_radius).ok()
+    transfer::hohmann_circular(
+        mu,
+        transfer::circular_orbit_radius(mu, rel.position, rel.velocity)?,
+        hohmann_target_radius,
+    )
+    .ok()
 }
 
 pub fn build_soi_snapshots_from_states(

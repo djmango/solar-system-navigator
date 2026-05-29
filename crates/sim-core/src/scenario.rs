@@ -1,7 +1,7 @@
 use glam::DVec3;
 use serde::Deserialize;
 
-use crate::astro::{G, DEFAULT_SOFTENING};
+use crate::astro::{DEFAULT_SOFTENING, G};
 
 #[derive(Debug, Clone, Deserialize, serde::Serialize)]
 pub struct Scenario {

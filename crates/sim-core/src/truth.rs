@@ -4,7 +4,7 @@ use glam::DVec3;
 
 use crate::maneuver::ManeuverNode;
 use crate::orbit::{self, RelativeState};
-use crate::physics::{gravitational_acceleration, BodyState};
+use crate::physics::{BodyState, gravitational_acceleration};
 use crate::scenario::Scenario;
 
 pub const TRUTH_PATH_SAMPLES: usize = 256;
@@ -252,7 +252,7 @@ mod tests {
     use super::*;
     use crate::astro;
     use crate::physics::total_energy;
-    use crate::scenario::{load_scenario_from_str, DEFAULT_SCENARIO};
+    use crate::scenario::{DEFAULT_SCENARIO, load_scenario_from_str};
 
     #[test]
     fn verlet_two_body_stays_bound() {
