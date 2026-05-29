@@ -2,7 +2,9 @@
  * Patches fetch() so wasm-bindgen loads Brotli-compressed *_bg.wasm.br assets.
  * Must run before the Trunk/wasm-bindgen module (inserted by compress-wasm-brotli.mjs).
  */
-import { decompress } from './brotli-decode.mjs';
+import brotliDecode from './brotli-decode.mjs';
+
+const decompress = brotliDecode.decompress;
 
 function wasmUrl(input) {
   if (typeof input === 'string') {

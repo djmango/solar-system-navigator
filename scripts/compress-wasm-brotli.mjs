@@ -59,21 +59,44 @@ function patchJsFiles(wasmBaseName) {
 function patchIndexHtml() {
   const indexPath = join(DIST, 'index.html');
   let html = readFileSync(indexPath, 'utf8');
+  let changed = false;
+
+  const patchedWasmRefs = html.replace(/_bg\.wasm(?!\.br)/g, '_bg.wasm.br');
+  if (patchedWasmRefs !== html) {
+    html = patchedWasmRefs;
+    changed = true;
+    console.log('Patched index.html → _bg.wasm.br');
+  }
+
+  // SRI was computed for raw wasm; drop it on brotli assets to avoid preload failures.
+  const withoutWasmIntegrity = html.replace(
+    /(<link[^>]*_bg\.wasm\.br[^>]*)\s+integrity="[^"]*"/g,
+    '$1',
+  );
+  if (withoutWasmIntegrity !== html) {
+    html = withoutWasmIntegrity;
+    changed = true;
+    console.log('Removed wasm integrity attribute from index.html preload');
+  }
+
   const shimTag =
     '<script type="module" src="./wasm-brotli-shim.js"></script>';
-  if (html.includes('wasm-brotli-shim.js')) {
-    return;
+  if (!html.includes('wasm-brotli-shim.js')) {
+    if (html.includes('type="module"')) {
+      html = html.replace(
+        /(\s*<script type="module")/,
+        `\n  ${shimTag}\n$1`,
+      );
+    } else {
+      html = html.replace('</body>', `  ${shimTag}\n</body>`);
+    }
+    changed = true;
+    console.log('Inserted wasm-brotli-shim.js into index.html');
   }
-  if (html.includes('type="module"')) {
-    html = html.replace(
-      /(\s*<script type="module")/,
-      `\n  ${shimTag}\n$1`,
-    );
-  } else {
-    html = html.replace('</body>', `  ${shimTag}\n</body>`);
+
+  if (changed) {
+    writeFileSync(indexPath, html);
   }
-  writeFileSync(indexPath, html);
-  console.log('Inserted wasm-brotli-shim.js into index.html');
 }
 
 const wasmFiles = readdirSync(DIST).filter((f) => f.endsWith('_bg.wasm'));
