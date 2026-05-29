@@ -7,7 +7,7 @@ For **https://solar.skg.gg** you typically combine:
 | Goal | Approach |
 |------|----------|
 | Public info + downloads | Static site (Cloudflare Pages or Proxmox + Caddy) |
-| Run the sim in the browser | WASM build → `dist/` (see Option D + Wrangler below) |
+| Run the sim in the browser | WASM build → `site/app/` (see Option D + Wrangler below) |
 | Run on your own PC | Linux/Windows release bundle |
 
 ---
@@ -114,7 +114,12 @@ Attach the tarball from Actions to the release; link from your landing page.
 
 ## Option D — In-browser at `solar.skg.gg` (WASM + WebGPU)
 
-Build a static site from the `dist/` folder (Trunk bundles WASM, JS, and `assets/`).
+One Cloudflare Pages project (`solar`) serves both the landing page and the WASM app:
+
+| Path | Content |
+|------|---------|
+| `/` | Landing page (`deploy/landing/`) |
+| `/app/` | WASM + WebGPU sim (Trunk `dist/`) |
 
 **Requirements**
 
@@ -130,7 +135,7 @@ Build a static site from the `dist/` folder (Trunk bundles WASM, JS, and `assets
 # output: dist/index.html + *.wasm + assets/
 ```
 
-Serve locally:
+Serve locally (WASM only):
 
 ```bash
 unset NO_COLOR   # trunk 0.21+ conflicts with NO_COLOR=1 in some CI shells
@@ -139,44 +144,32 @@ trunk serve --no-default-features --features web --open
 
 **Cloudflare Pages + Wrangler**
 
-You are ready to deploy once the WASM branch is merged (or build locally and upload).
-
-| Deploy | Output dir | URL layout |
-|--------|------------|------------|
-| Play only | `dist/` | App at `/` |
-| Landing + play | `site/` from `./scripts/assemble-site.sh` | Landing `/`, WASM `/play/` |
-
 **A — Dashboard (Git-connected Pages)**
 
 1. Workers & Pages → Create → Connect to `djmango/solar-system-navigator`
 2. Production branch: `master` (after WASM PR merges)
 3. **Build command:** `bash scripts/cloudflare-pages-build.sh`
-4. **Build output directory:** `dist`
-5. Custom domain: `solar.skg.gg` or `play.solar.skg.gg`
+4. **Build output directory:** `site`
+5. Custom domain: `solar.skg.gg`
 6. Environment variable (optional): `SOLAR_TEXTURE_RES=2k`
+
+The build script runs Trunk, then `./scripts/assemble-site.sh`, so Pages receives the combined `site/` directory.
 
 First build may take **15–25 minutes** (Rust + Trunk). If Pages times out, use option B.
 
-**B — Wrangler CLI (pre-built `dist/`, recommended for first deploy)**
-
-```bash
-./scripts/build-wasm.sh
-npx wrangler login
-npx wrangler pages project create solar-play --production-branch master
-npx wrangler pages deploy dist --project-name=solar-play
-```
-
-Add custom domain in the Cloudflare dashboard for the Pages project.
-
-**C — Landing + WASM on one domain**
+**B — Wrangler CLI (pre-built `site/`, recommended for first deploy)**
 
 ```bash
 ./scripts/build-wasm.sh
 ./scripts/assemble-site.sh
+npx wrangler login
+npx wrangler pages project create solar --production-branch master
 npx wrangler pages deploy site --project-name=solar
 ```
 
-Repo includes `wrangler.toml` (`pages_build_output_dir = "dist"`).
+Add custom domain `solar.skg.gg` in the Cloudflare dashboard for the Pages project.
+
+Repo includes `wrangler.toml` (`name = "solar"`, `pages_build_output_dir = "site"`).
 
 **Notes**
 
@@ -200,8 +193,7 @@ Linux needs Vulkan or Mesa (same as dev). First launch downloads planet textures
 
 ## Quick checklist for `solar.skg.gg`
 
-1. [ ] WASM: `./scripts/build-wasm.sh` → `wrangler pages deploy dist` (or Pages CI build)
+1. [ ] WASM: `./scripts/build-wasm.sh` → `./scripts/assemble-site.sh` → `wrangler pages deploy site --project-name=solar` (or Pages CI build)
 2. [ ] Native: `./scripts/build-release.sh && ./scripts/package-release.sh`
-3. [ ] Optional: `./scripts/assemble-site.sh` for landing at `/` + play at `/play/`
-4. [ ] DNS `solar` → Pages or Proxmox / Tunnel
-5. [ ] Test WebGPU in Chrome and Linux download link
+3. [ ] DNS `solar` → Pages or Proxmox / Tunnel
+4. [ ] Test WebGPU at `https://solar.skg.gg/app/` and Linux download link

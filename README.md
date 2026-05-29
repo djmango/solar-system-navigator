@@ -78,6 +78,8 @@ SOLAR_TEXTURE_RES=2k ./scripts/build-wasm.sh   # → dist/
 trunk serve --no-default-features --features web --open
 ```
 
+Live demo: **[solar.skg.gg/app/](https://solar.skg.gg/app/)** (landing at [solar.skg.gg](https://solar.skg.gg)).
+
 See [docs/DEPLOY.md](docs/DEPLOY.md) for Cloudflare Pages and `solar.skg.gg` hosting.
 
 ## Project layout

@@ -1,12 +1,18 @@
-# Cloudflare Pages — WASM + WebGPU app (Trunk output in dist/)
+# Cloudflare Pages — single site at solar.skg.gg
 # https://developers.cloudflare.com/pages/
+#
+# Layout after ./scripts/assemble-site.sh:
+#   /      landing page (deploy/landing/)
+#   /app/  WASM + WebGPU sim (Trunk dist/)
 #
 # Deploy pre-built output:
 #   ./scripts/build-wasm.sh
-#   npx wrangler pages deploy dist --project-name=solar-play
+#   ./scripts/assemble-site.sh
+#   npx wrangler pages deploy site --project-name=solar
 #
 # Or connect this repo in the dashboard and use scripts/cloudflare-pages-build.sh
+# (build script runs assemble-site so output dir is site/).
 
-name = "solar-play"
+name = "solar"
 compatibility_date = "2025-05-01"
-pages_build_output_dir = "dist"
+pages_build_output_dir = "site"

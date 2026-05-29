@@ -19,6 +19,7 @@
 
 # WASM / Trunk output
 /dist/
+/site/
 
 # Bevy specific
 assets/.DS_Store
