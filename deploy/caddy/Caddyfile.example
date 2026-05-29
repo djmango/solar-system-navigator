@@ -1,0 +1,18 @@
+# Example Caddy v2 site for Proxmox / bare metal
+# Install: https://caddyserver.com/docs/install
+# Place files in /var/www/solar.skg.gg (see docs/DEPLOY.md)
+
+solar.skg.gg {
+    root * /var/www/solar.skg.gg
+    file_server
+    encode gzip zstd
+
+    header {
+        X-Content-Type-Options nosniff
+        Referrer-Policy strict-origin-when-cross-origin
+    }
+
+    # Optional: cache release tarballs
+    @releases path /releases/*
+    header @releases Cache-Control "public, max-age=3600"
+}

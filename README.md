@@ -4,13 +4,13 @@ A **3D** Rust application for visualizing and experimenting with celestial traje
 
 > **Units:** SI — meters, kilograms, seconds (`G = 6.67430×10⁻¹¹`). Orbits use circular, coplanar, mean-distance states (not a specific ephemeris date). For mission-grade ephemerides use [GMAT](https://gmat.sourceforge.io/) or STK. Planet **mesh size** is exaggerated via `visual_radius` so bodies remain visible at true orbital scale.
 
-> **Orbit rings vs simulation:** Colored rings are **two-body osculating ellipses** around the planner central body. The simulation is **full N-body** with a fixed primary — rings are planning aids and will diverge from simulated paths over long warps.
+> **Truth paths:** Orbit lines are produced by the **same N-body velocity Verlet integrator** as the live simulation (Plummer softening, fixed primary, inter-planet gravity). At load you see one integrated period from the scenario’s initial conditions; after you press **Space** to run, paths record the **actual simulated trajectory**. Maneuver previews also integrate the full N-body system with impulsive burns.
 
 ## Features
 
 - **3D real-time visualization** — PBR spheres, orbit trails, game-style orbit camera
 - **Click to select** — Hover highlight, follow camera, frame orbit in view
-- **Full orbit rings** — Heliocentric (or central-body) Kepler paths for all major bodies
+- **N-body truth orbits** — Integrated paths (not separate 2-body ellipses) for all major bodies
 - **Data-driven scenarios** — Add or edit bodies in `assets/**/*.toml` without recompiling
 - **Mission presets** — Inner system, simplified Apollo 11, simplified OSIRIS-REx
 - **Simulation controls** — Speed, substeps, pause, single-step, planner time (paused)
@@ -43,7 +43,7 @@ A **3D** Rust application for visualizing and experimenting with celestial traje
 | M | Map mode — full orbit rings + body list in HUD |
 | Esc | Exit map mode |
 | Q / E | Rotate map view (in map mode) |
-| V | Toggle orbit lines (2-body rings + maneuver previews) |
+| V | Toggle N-body truth orbit paths + maneuver previews |
 | B / C | Add / clear maneuver nodes |
 | O | Toggle automatic SOI central-body switching |
 | H / Shift+H | Hohmann Δv draft / add maneuver pair |
@@ -79,7 +79,8 @@ src/
   physics.rs      # N-body gravity + integrator (unit tested)
   orbit.rs        # Two-body Kepler previews + TNW frame
   maneuver.rs     # Burn execution at maneuver nodes
-  map_view.rs     # Map mode camera + orbit gizmos
+  truth.rs        # Shared N-body integrator + truth path precompute
+  map_view.rs     # Map mode camera + truth orbit gizmos
   interaction.rs  # Mouse pick, hover, camera framing
   planner.rs      # Sim clock + route planner sync
   scenario.rs     # TOML loader + validation tests
@@ -111,6 +112,17 @@ xvfb-run -a ./scripts/record_demo.sh
 ```
 
 Output: `artifacts/demo.mp4` (duration matches `SOLAR_DEMO_SECONDS`, default 22s)
+
+## Deploying (e.g. solar.skg.gg)
+
+This is a **native desktop app** today — host a static landing page + Linux download on Proxmox/Caddy or Cloudflare Pages. In-browser play needs a future WASM build.
+
+See **[docs/DEPLOY.md](docs/DEPLOY.md)** for Proxmox, Cloudflare Tunnel, Pages, and GitHub Releases.
+
+```bash
+./scripts/build-release.sh
+./scripts/package-release.sh   # → dist/solar-system-navigator-linux-x86_64.tar.gz
+```
 
 ## License
 

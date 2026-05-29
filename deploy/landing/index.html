@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Solar System Navigator</title>
+  <meta name="description" content="3D N-body solar system simulation and KSP-style route planner (Rust + Bevy)." />
+  <style>
+    :root {
+      --bg: #06070c;
+      --card: #12141c;
+      --text: #e8ecf4;
+      --muted: #9aa3b5;
+      --accent: #6eb5ff;
+      --accent2: #ffb86c;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+      background: radial-gradient(ellipse at 30% 0%, #1a2040 0%, var(--bg) 55%);
+      color: var(--text);
+      line-height: 1.6;
+      min-height: 100vh;
+    }
+    .wrap { max-width: 720px; margin: 0 auto; padding: 2.5rem 1.25rem 4rem; }
+    h1 { font-size: 2rem; font-weight: 700; margin: 0 0 0.5rem; }
+    .tag { color: var(--muted); font-size: 1.05rem; margin-bottom: 2rem; }
+    .card {
+      background: var(--card);
+      border: 1px solid #252a38;
+      border-radius: 12px;
+      padding: 1.25rem 1.5rem;
+      margin-bottom: 1.25rem;
+    }
+    h2 { font-size: 1.1rem; margin: 0 0 0.75rem; color: var(--accent); }
+    a.btn {
+      display: inline-block;
+      background: linear-gradient(135deg, #3d7dd6, #6eb5ff);
+      color: #041018;
+      font-weight: 600;
+      text-decoration: none;
+      padding: 0.65rem 1.2rem;
+      border-radius: 8px;
+      margin-top: 0.5rem;
+    }
+    a.btn:hover { filter: brightness(1.08); }
+    code { background: #1c2030; padding: 0.15em 0.4em; border-radius: 4px; font-size: 0.9em; }
+    ul { padding-left: 1.2rem; color: var(--muted); }
+    li { margin: 0.35rem 0; }
+    .note { font-size: 0.9rem; color: var(--muted); border-left: 3px solid var(--accent2); padding-left: 0.75rem; margin-top: 1rem; }
+    footer { margin-top: 2rem; font-size: 0.85rem; color: var(--muted); }
+    footer a { color: var(--accent); }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>Solar System Navigator</h1>
+    <p class="tag">3D N-body solar system sim · SI physics · KSP-style map &amp; maneuvers</p>
+
+    <div class="card">
+      <h2>Download (Linux)</h2>
+      <p>Native desktop app — Vulkan/OpenGL, ~1280×720. Not a browser build yet.</p>
+      <a class="btn" href="releases/solar-system-navigator-linux-x86_64.tar.gz">Linux x86_64 (.tar.gz)</a>
+      <p class="note">After download: extract, then run <code>./solar-system-navigator</code> from the folder. First run may download planet textures.</p>
+    </div>
+
+    <div class="card">
+      <h2>Build from source</h2>
+      <ul>
+        <li>Rust 1.95+, Bevy 0.18</li>
+        <li><code>git clone https://github.com/djmango/solar-system-navigator.git</code></li>
+        <li><code>cargo run --release</code></li>
+      </ul>
+    </div>
+
+    <div class="card">
+      <h2>Controls (quick)</h2>
+      <ul>
+        <li>Click planets to select · Space to pause/run</li>
+        <li>M — map mode · V — N-body orbit paths</li>
+        <li>LMB orbit camera · Scroll zoom</li>
+      </ul>
+    </div>
+
+    <footer>
+      <a href="https://github.com/djmango/solar-system-navigator">Source on GitHub</a>
+      · MIT/Apache-2.0
+    </footer>
+  </div>
+</body>
+</html>
