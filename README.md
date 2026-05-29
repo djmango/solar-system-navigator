@@ -68,6 +68,20 @@ Release bundle (binary + `assets/`):
 cd dist/solar-system-navigator && ./solar-system-navigator
 ```
 
+### Browser (WASM + WebGPU)
+
+Requires a **WebGPU** browser and [Trunk](https://trunkrs.dev/):
+
+```bash
+rustup target add wasm32-unknown-unknown
+SOLAR_TEXTURE_RES=2k ./scripts/build-wasm.sh   # → dist/
+trunk serve --no-default-features --features web --open
+```
+
+Live demo: **[solar.skg.gg](https://solar.skg.gg)** (game loads at `/`).
+
+See [docs/DEPLOY.md](docs/DEPLOY.md) for Cloudflare Pages / Wrangler.
+
 ## Project layout
 
 ```
@@ -115,13 +129,14 @@ Output: `artifacts/demo.mp4` (duration matches `SOLAR_DEMO_SECONDS`, default 22s
 
 ## Deploying (e.g. solar.skg.gg)
 
-This is a **native desktop app** today — a static landing page deploys to **Cloudflare Pages** on every `master` push; Linux builds publish to the **`continuous`** GitHub Release. In-browser play needs a future WASM build (see branch `sully/wasm-webgpu-17fb`).
+**Browser:** WASM + WebGPU at **https://solar.skg.gg** (sim loads at `/`). **Desktop:** Linux builds publish to the **`continuous`** GitHub Release on every `master` push.
 
-See **[docs/DEPLOY.md](docs/DEPLOY.md)** for Cloudflare secrets, Proxmox/Caddy, and tagged releases.
+See **[docs/DEPLOY.md](docs/DEPLOY.md)** for Cloudflare secrets, WASM build, and tagged releases.
 
 ```bash
-./scripts/build-release.sh
-./scripts/package-release.sh   # → dist/solar-system-navigator-linux-x86_64.tar.gz
+./scripts/build-wasm.sh              # browser → dist/
+./scripts/build-release.sh           # native desktop
+./scripts/package-release.sh         # → dist/solar-system-navigator-linux-x86_64.tar.gz
 ```
 
 ## License

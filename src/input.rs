@@ -31,6 +31,7 @@ pub fn keyboard_controls(
         &Position,
         &Velocity,
         &SoiRadius,
+        &crate::components::TruthOrbit,
         Option<&crate::components::FixedBody>,
         Option<&crate::components::Probe>,
     )>,

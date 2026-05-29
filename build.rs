@@ -58,6 +58,11 @@ fn fetch_textures(root: &Path) {
 }
 
 fn main() {
+    if std::env::var("CARGO_CFG_TARGET_ARCH").ok().as_deref() == Some("wasm32") {
+        println!("cargo:warning=WASM build — skipping texture fetch (bundle assets/ for Trunk)");
+        return;
+    }
+
     let root = manifest_dir();
 
     println!("cargo:rerun-if-changed=scripts/fetch_textures.sh");

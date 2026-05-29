@@ -1,0 +1,7 @@
+[build]
+target = "web/index.html"
+dist = "dist"
+public_url = "/"
+
+[watch]
+ignore = ["dist"]

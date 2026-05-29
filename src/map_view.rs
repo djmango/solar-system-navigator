@@ -1,24 +1,24 @@
-//! KSP-style map mode: orthographic system view and predicted orbit gizmos.
+//! KSP-style map mode and N-body truth orbit visualization.
 
 use bevy::prelude::*;
 
 use crate::astro::AU;
 use crate::camera::OrbitCamera;
 use crate::components::{
-    CelestialBody, FixedBody, Mass as BodyMass, Position, Probe, SoiRadius, Velocity,
+    CelestialBody, FixedBody, Mass as BodyMass, Position, Probe, SoiRadius, TruthOrbit, Velocity,
 };
 use crate::orbit::{self, RelativeState};
-use crate::planner::{build_soi_snapshots, relative_target_state};
+use crate::physics::BodyState;
+use crate::planner::build_soi_snapshots;
 use crate::resources::{
     ActiveScenario, GameUx, MapViewMode, PhysicsConstants, RoutePlanner, SimulationClock,
 };
 use crate::scenario::BodyDef;
 use crate::soi::SoiBodySnapshot;
+use crate::truth::{TRUTH_INTEGRATION_DT, predict_target_path_nbody};
 
 const MAP_RADIUS: f32 = 3.2 * AU;
 const MAP_PITCH: f32 = std::f32::consts::FRAC_PI_2 - 0.02;
-const SYSTEM_ORBIT_SEGMENTS: usize = 256;
-const TARGET_ORBIT_SEGMENTS: usize = 160;
 
 pub fn toggle_map_mode(
     keyboard: Res<ButtonInput<KeyCode>>,
@@ -85,6 +85,7 @@ pub fn draw_orbit_previews(
         &Position,
         &Velocity,
         &SoiRadius,
+        &TruthOrbit,
         Option<&FixedBody>,
         Option<&Probe>,
     )>,
@@ -113,14 +114,11 @@ pub fn draw_orbit_previews(
         Some(c) => c,
         None => return,
     };
-    let mu = physics.g * central.mass;
 
     if show_system {
-        draw_all_system_orbits(
+        draw_nbody_truth_orbits(
             &mut gizmos,
-            &snapshots,
-            central,
-            mu,
+            &bodies,
             &active.template.bodies,
             planner.target_body.as_deref(),
         );
@@ -130,6 +128,7 @@ pub fn draw_orbit_previews(
         if map_mode.active {
             draw_soi_gizmos(&mut gizmos, &snapshots);
             if let Some(xfer) = planner.last_hohmann {
+                let mu = physics.g * central.mass;
                 draw_hohmann_target_orbit(&mut gizmos, mu, central.position, xfer.r2);
             }
         }
@@ -149,52 +148,43 @@ pub fn draw_orbit_previews(
 
     let is_probe = bodies
         .iter()
-        .any(|(c, _, _, _, _, _, probe)| c.name == target_name && probe.is_some());
+        .any(|(c, _, _, _, _, _, _, probe)| c.name == target_name && probe.is_some());
 
-    let Some(rel) = relative_target_state(&snapshots, &central_name, &target_name) else {
-        return;
-    };
-
-    let color_current = if is_probe {
-        Color::srgba(0.3, 0.95, 1.0, 0.95)
-    } else {
-        Color::srgba(1.0, 1.0, 1.0, 0.95)
-    };
-
-    let current_path = orbit::sample_orbit_path(mu, rel, TARGET_ORBIT_SEGMENTS);
-    draw_path_inertial(
-        &mut gizmos,
-        &current_path,
-        central.position,
-        color_current,
-        2.0,
-    );
-
-    let node_params: Vec<(f32, f32, f32, f32)> = planner
-        .nodes
+    if let Some(truth) = bodies
         .iter()
-        .map(|n| (n.time, n.prograde, n.normal, n.radial))
-        .collect();
+        .find(|(c, _, _, _, _, _, _, _)| c.name == target_name)
+        .map(|(_, _, _, _, _, t, _, _)| t)
+    {
+        let color = if is_probe {
+            Color::srgba(0.3, 0.95, 1.0, 0.95)
+        } else {
+            Color::srgba(1.0, 1.0, 1.0, 0.95)
+        };
+        draw_world_path(&mut gizmos, &truth.points, color);
+    }
 
-    if !node_params.is_empty() {
+    if !planner.nodes.is_empty() {
+        let initial = snapshot_states(&bodies);
         let horizon = planner.preview_horizon.max(50.0);
-        let step = planner.preview_step.max(0.05);
-        let predicted =
-            orbit::propagate_with_nodes(mu, rel, &node_params, clock.time, horizon, step);
-        draw_path_inertial(
-            &mut gizmos,
-            &predicted,
-            central.position,
-            Color::srgba(1.0, 0.55, 0.15, 0.95),
-            2.5,
+        let predicted = predict_target_path_nbody(
+            &initial,
+            &central_name,
+            &target_name,
+            &planner.nodes,
+            clock.time,
+            horizon,
+            planner.preview_step.max(TRUTH_INTEGRATION_DT * 0.25),
+            physics.g,
+            physics.softening,
         );
+        draw_world_path(&mut gizmos, &predicted, Color::srgba(1.0, 0.55, 0.15, 0.95));
 
+        let step = planner.preview_step.max(TRUTH_INTEGRATION_DT * 0.25);
         for node in &planner.nodes {
             let time_offset = (node.time - clock.time).max(0.0);
             if let Some(pos) = position_at_time(&predicted, time_offset, step) {
-                let world = central.position + pos;
                 let marker = 5.0e8 + node.delta_v_magnitude() * 2.0e7;
-                gizmos.sphere(world, marker, Color::srgba(1.0, 0.9, 0.2, 0.95));
+                gizmos.sphere(pos, marker, Color::srgba(1.0, 0.9, 0.2, 0.95));
             }
         }
     }
@@ -202,37 +192,63 @@ pub fn draw_orbit_previews(
     if map_mode.active {
         draw_soi_gizmos(&mut gizmos, &snapshots);
         if let Some(xfer) = planner.last_hohmann {
+            let mu = physics.g * central.mass;
             draw_hohmann_target_orbit(&mut gizmos, mu, central.position, xfer.r2);
         }
     }
 }
 
-fn draw_all_system_orbits(
+fn snapshot_states(
+    bodies: &Query<(
+        &CelestialBody,
+        &BodyMass,
+        &Position,
+        &Velocity,
+        &SoiRadius,
+        &TruthOrbit,
+        Option<&FixedBody>,
+        Option<&Probe>,
+    )>,
+) -> Vec<BodyState> {
+    bodies
+        .iter()
+        .map(|(c, m, p, v, _, _, fixed, _)| BodyState {
+            name: c.name.clone(),
+            position: p.0,
+            velocity: v.0,
+            mass: m.0,
+            fixed: fixed.is_some(),
+        })
+        .collect()
+}
+
+fn draw_nbody_truth_orbits(
     gizmos: &mut Gizmos,
-    snapshots: &[SoiBodySnapshot],
-    primary: &SoiBodySnapshot,
-    mu: f32,
+    bodies: &Query<(
+        &CelestialBody,
+        &BodyMass,
+        &Position,
+        &Velocity,
+        &SoiRadius,
+        &TruthOrbit,
+        Option<&FixedBody>,
+        Option<&Probe>,
+    )>,
     body_defs: &[BodyDef],
     highlight: Option<&str>,
 ) {
-    for body in snapshots {
-        if body.is_primary {
+    for (body, _, _, _, _, truth, fixed, _) in bodies {
+        if fixed.is_some() || truth.points.len() < 2 {
             continue;
         }
-        let rel = RelativeState::new(
-            body.position - primary.position,
-            body.velocity - primary.velocity,
-        );
-        let path = orbit::sample_orbit_path(mu, rel, SYSTEM_ORBIT_SEGMENTS);
         let base = body_color(body_defs, &body.name);
         let selected = highlight == Some(body.name.as_str());
         let color = if selected {
             Color::srgba(1.0, 1.0, 1.0, 0.95)
         } else {
-            base.with_alpha(0.45)
+            base.with_alpha(0.5)
         };
-        let width = if selected { 2.5 } else { 1.0 };
-        draw_path_inertial(gizmos, &path, primary.position, color, width);
+        draw_world_path(gizmos, &truth.points, color);
     }
 }
 
@@ -260,16 +276,16 @@ fn draw_hohmann_target_orbit(gizmos: &mut Gizmos, mu: f32, origin: Vec3, radius:
         Vec3::new(0.0, 0.0, (mu / radius).sqrt()),
     );
     let path = orbit::sample_orbit_path(mu, state, 96);
-    draw_path_inertial(
-        gizmos,
-        &path,
-        origin,
-        Color::srgba(0.85, 0.35, 1.0, 0.55),
-        1.5,
-    );
+    draw_path_relative(gizmos, &path, origin, Color::srgba(0.85, 0.35, 1.0, 0.55));
 }
 
-fn draw_path_inertial(gizmos: &mut Gizmos, path: &[Vec3], origin: Vec3, color: Color, _width: f32) {
+fn draw_world_path(gizmos: &mut Gizmos, path: &[Vec3], color: Color) {
+    for window in path.windows(2) {
+        gizmos.line(window[0], window[1], color);
+    }
+}
+
+fn draw_path_relative(gizmos: &mut Gizmos, path: &[Vec3], origin: Vec3, color: Color) {
     for window in path.windows(2) {
         gizmos.line(origin + window[0], origin + window[1], color);
     }

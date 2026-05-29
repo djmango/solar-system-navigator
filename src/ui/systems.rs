@@ -276,7 +276,7 @@ pub fn update_hud_text(
         .map(|c| astro::format_length(c.radius))
         .unwrap_or_else(|_| "?".to_string());
     let orbit_note = if game_ux.show_system_orbits {
-        "2-body rings (osculating)"
+        "N-body truth paths"
     } else {
         "hidden"
     };
@@ -343,7 +343,7 @@ pub fn update_hud_text(
             String::new()
         };
         **planner_ui = format!(
-            "Map: {} | SOI auto: {} | Central: {} | Target: {} | Nodes: {}{} | Rings ≠ N-body path over long warps{map_bodies}",
+            "Map: {} | SOI auto: {} | Central: {} | Target: {} | Nodes: {}{} | Paths = same N-body integrator as sim{map_bodies}",
             if map_mode.active { "ON" } else { "off" },
             if planner.soi_auto { "on" } else { "off" },
             central,

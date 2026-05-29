@@ -83,3 +83,23 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - name: cargo build --release
         run: cargo build --release
+
+  wasm:
+    name: Build (WASM / WebGPU)
+    runs-on: ubuntu-latest
+    needs: [lint, test]
+    env:
+      SOLAR_TEXTURE_RES: 2k
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.95
+          targets: wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@v2
+      - name: Fetch planet textures (2k)
+        run: ./scripts/fetch_textures.sh
+      - name: Install trunk
+        run: cargo install trunk --locked
+      - name: trunk build
+        run: trunk build --release --no-default-features --features web
