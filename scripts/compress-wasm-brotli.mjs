@@ -50,7 +50,7 @@ function patchJsFiles(wasmBaseName) {
     if (!js.includes('_bg.wasm')) {
       continue;
     }
-    js = js.replaceAll('_bg.wasm', '_bg.wasm.br');
+    js = js.replace(/_bg\.wasm(?!\.br)/g, '_bg.wasm.br');
     writeFileSync(path, js);
     console.log(`Patched ${file} → _bg.wasm.br`);
   }
@@ -68,15 +68,12 @@ function patchIndexHtml() {
     console.log('Patched index.html → _bg.wasm.br');
   }
 
-  // SRI was computed for raw wasm; drop it on brotli assets to avoid preload failures.
-  const withoutWasmIntegrity = html.replace(
-    /(<link[^>]*_bg\.wasm\.br[^>]*)\s+integrity="[^"]*"/g,
-    '$1',
-  );
-  if (withoutWasmIntegrity !== html) {
-    html = withoutWasmIntegrity;
+  // Post-Trunk patches change JS/wasm bytes; SRI hashes in index.html would block loads.
+  const withoutIntegrity = html.replace(/\s+integrity="[^"]*"/g, '');
+  if (withoutIntegrity !== html) {
+    html = withoutIntegrity;
     changed = true;
-    console.log('Removed wasm integrity attribute from index.html preload');
+    console.log('Removed stale integrity attributes from index.html');
   }
 
   const shimTag =
