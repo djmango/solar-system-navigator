@@ -24,9 +24,11 @@ Cloudflare runs **two steps** on each push: **build** then **deploy**. Fill in b
 
 | Setting | Value |
 |---------|-------|
-| **Build command** | `bash scripts/cloudflare-pages-build.sh` |
-| **Deploy command** | `npx wrangler deploy` |
-| **Root directory** (Advanced) | *(leave empty — repo root)* |
+| **Build command** | `npm run build` |
+| **Deploy command** | `npm run deploy` |
+| **Root directory** (Advanced) | **Leave completely empty** — not `/`, not `dist` |
+
+> **Common failure:** `Failed: root directory not found` means Root directory is set to a path that does not exist in git (often `dist`, which is build output and gitignored). Clear the field and save.
 
 **Non-production branch deploy command** (previews): `npx wrangler deploy`
 
@@ -41,7 +43,7 @@ The build step writes WASM + assets to `dist/`; deploy uploads them via `[assets
 5. **Save and Deploy** — first build may take 15–25 minutes.
 6. **Custom domains** → add **`solar.skg.gg`**
 
-After that, every push to `master` triggers a new Pages deployment automatically.
+Cloudflare **auto-builds on every push** to `master`. It does **not** auto-retry a failed build for the same commit — push again or click **Retry** in the dashboard / GitHub check run.
 
 ### What the build does
 

@@ -1,0 +1,11 @@
+{
+  "name": "solar-system-navigator",
+  "private": true,
+  "scripts": {
+    "build": "bash scripts/cloudflare-pages-build.sh",
+    "deploy": "wrangler deploy"
+  },
+  "devDependencies": {
+    "wrangler": "^4.24.0"
+  }
+}
