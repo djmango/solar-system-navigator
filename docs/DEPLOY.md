@@ -14,27 +14,32 @@ Native desktop (Bevy + Vulkan) and **browser** (WASM + WebGPU). For **https://so
 
 Cloudflare builds and deploys on every push to `master`. No GitHub Actions secrets needed.
 
-### One-time setup
+### One-time setup (Workers & Pages → Connect to Git)
 
-1. [Cloudflare dashboard](https://dash.cloudflare.com) → **Workers & Pages** → **Create** → **Pages** → **Connect to Git**
-2. Authorize GitHub → select **`djmango/solar-system-navigator`**
-3. **Production branch:** `master`
-4. **Build settings** (auto-filled from `wrangler.toml` if detected; otherwise set manually):
+Cloudflare runs **two steps** on each push: **build** then **deploy**. Fill in both.
 
-   | Setting | Value |
-   |---------|-------|
-   | Framework preset | None |
-   | Build command | `bash scripts/cloudflare-pages-build.sh` |
-   | Build output directory | `dist` |
+1. [Cloudflare dashboard](https://dash.cloudflare.com) → **Workers & Pages** → **Create** → connect GitHub → **`djmango/solar-system-navigator`**
+2. **Production branch:** `master`
+3. **Project / Worker name:** `solar-system-navigator` (must match `name` in `wrangler.toml`)
 
-5. **Environment variables** (optional — defaults are fine):
+| Setting | Value |
+|---------|-------|
+| **Build command** | `bash scripts/cloudflare-pages-build.sh` |
+| **Deploy command** | `npx wrangler deploy` |
+| **Root directory** (Advanced) | *(leave empty — repo root)* |
+
+**Non-production branch deploy command** (previews): `npx wrangler deploy`
+
+The build step writes WASM + assets to `dist/`; deploy uploads them via `[assets]` in `wrangler.toml`.
+
+4. **Environment variables** (optional):
 
    | Name | Value |
    |------|-------|
    | `SOLAR_TEXTURE_RES` | `2k` |
 
-6. **Save and Deploy** — first build may take 15–25 minutes (Rust + Trunk + textures).
-7. **Custom domains** → add **`solar.skg.gg`** (zone `skg.gg` must be on Cloudflare).
+5. **Save and Deploy** — first build may take 15–25 minutes.
+6. **Custom domains** → add **`solar.skg.gg`**
 
 After that, every push to `master` triggers a new Pages deployment automatically.
 

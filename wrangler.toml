@@ -1,17 +1,14 @@
-# https://solar.skg.gg — WASM game loads at / (no separate landing page)
+# https://solar.skg.gg — WASM game at / (static assets on Workers)
 #
-# Connect this repo in Cloudflare Pages (Workers & Pages → Create → Connect to Git).
-# Cloudflare reads this file for build settings; or set manually in the dashboard:
+# Cloudflare Workers Builds (Connect to Git):
 #   Build command:  bash scripts/cloudflare-pages-build.sh
-#   Output dir:     dist
+#   Deploy command: npx wrangler deploy
+#   Root directory: (empty)
 #
-# Manual CLI deploy:
-#   ./scripts/build-wasm.sh
-#   npx wrangler pages deploy dist --project-name=solar
+# Worker name must match the Cloudflare dashboard project name exactly.
 
-name = "solar"
+name = "solar-system-navigator"
 compatibility_date = "2025-05-01"
-pages_build_output_dir = "dist"
 
-[build]
-command = "bash scripts/cloudflare-pages-build.sh"
+[assets]
+directory = "./dist"
