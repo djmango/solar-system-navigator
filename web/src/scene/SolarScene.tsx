@@ -1,47 +1,34 @@
-import { Html, OrbitControls, Stars } from "@react-three/drei";
+import { Html, OrbitControls } from "@react-three/drei";
 import { Canvas } from "@react-three/fiber";
 import { Suspense, useRef } from "react";
 import * as THREE from "three";
 import type { OrbitControls as OrbitControlsImpl } from "three-stdlib";
-import { toScene } from "@/lib/units";
 import { Bodies } from "./Bodies";
 import { OrbitPaths, ManeuverNodeMarkers } from "./OrbitPaths";
 import { ManeuverPreview } from "./ManeuverPreview";
 import { ManeuverGizmo } from "./ManeuverGizmo";
 import { CameraRig } from "./CameraRig";
-import { useSimStore } from "@/store/simStore";
-
-function SunLight() {
-  const bodies = useSimStore((s) => s.bodies);
-  const sun = bodies.find((b) => b.name === "Sun");
-  const pos = sun?.position ?? [0, 0, 0];
-  const sunScene = new THREE.Vector3(toScene(pos[0]), toScene(pos[1]), toScene(pos[2]));
-  return (
-    <>
-      <pointLight position={sunScene} intensity={3} distance={0} decay={0} />
-      <directionalLight
-        position={sunScene}
-        intensity={1.2}
-        target={undefined}
-      />
-    </>
-  );
-}
+import { Starfield } from "./Starfield";
 
 export function SolarScene() {
   const controlsRef = useRef<OrbitControlsImpl>(null);
 
   return (
     <Canvas
-      camera={{ position: [0, 6, 14], fov: 50, near: 0.00001, far: 5000 }}
-      gl={{ antialias: true, alpha: false }}
-      dpr={[1, 2]}
+      camera={{ position: [0, 6, 14], fov: 50, near: 0.001, far: 2000 }}
+      gl={{
+        antialias: true,
+        alpha: false,
+        powerPreference: "high-performance",
+        toneMapping: THREE.NoToneMapping,
+      }}
+      dpr={[1, 1.5]}
+      frameloop="always"
     >
       <color attach="background" args={["#070b14"]} />
-      <ambientLight intensity={0.22} />
-      <SunLight />
-      <directionalLight position={[8, 4, 2]} intensity={0.25} />
-      <Stars radius={400} depth={100} count={8000} factor={4} fade speed={0.15} />
+      <ambientLight intensity={0.35} />
+      <directionalLight position={[100, 40, 60]} intensity={0.9} />
+      <Starfield />
       <Suspense fallback={null}>
         <Bodies />
         <OrbitPaths />
@@ -53,12 +40,12 @@ export function SolarScene() {
         ref={controlsRef}
         makeDefault
         enablePan
-        minDistance={0.005}
-        maxDistance={800}
+        minDistance={0.02}
+        maxDistance={400}
         rotateSpeed={0.45}
         zoomSpeed={1.0}
         enableDamping
-        dampingFactor={0.08}
+        dampingFactor={0.1}
       />
       <CameraRig controlsRef={controlsRef} />
       <Html fullscreen style={{ pointerEvents: "none" }}>
