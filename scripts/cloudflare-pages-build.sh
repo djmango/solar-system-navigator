@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
-# Cloudflare Pages build command (set in dashboard or wrangler).
-# Installs Rust + Trunk, fetches 2k textures, builds WASM into dist/, then assembles site/.
+# Cloudflare Pages build: Rust + Trunk → dist/ (game at site root).
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -31,6 +30,4 @@ fi
 unset NO_COLOR
 trunk build --release --no-default-features --features web
 
-./scripts/assemble-site.sh
-
-echo "Pages build complete: site/ ($(du -sh site | cut -f1))"
+echo "Pages build complete: dist/ ($(du -sh dist | cut -f1))"
