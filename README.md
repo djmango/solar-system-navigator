@@ -129,15 +129,15 @@ Output: `artifacts/demo.mp4` (duration matches `SOLAR_DEMO_SECONDS`, default 22s
 
 ## Deploying (e.g. solar.skg.gg)
 
-**Browser:** connect the repo in **Cloudflare Pages** (Workers & Pages → Connect to Git) — builds `dist/` on every `master` push. **Desktop:** Linux tarball auto-publishes to the **`continuous`** GitHub Release.
+**Browser:** connect the repo in **Cloudflare Pages** (Workers & Pages → Connect to Git) — builds `dist/` on every `master` push.
 
 See **[docs/DEPLOY.md](docs/DEPLOY.md)** for Cloudflare dashboard steps and local build commands.
 
 ```bash
-./scripts/build-wasm.sh              # browser → dist/
-./scripts/build-release.sh           # native desktop
-./scripts/package-release.sh         # → dist/solar-system-navigator-linux-x86_64.tar.gz
+bash scripts/cloudflare-pages-build.sh   # browser → dist/
 ```
+
+The legacy Bevy desktop app remains in `crates/navigator-legacy/` for local use (`./scripts/build-release.sh`).
 
 ## License
 

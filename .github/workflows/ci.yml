@@ -8,7 +8,7 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
-  # Smaller textures for CI; build.rs auto-fetches when assets/textures/ is empty.
+  # Smaller textures for CI web build; fetch script uses this when assets are missing.
   SOLAR_TEXTURE_RES: 2k
 
 jobs:
@@ -17,16 +17,6 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Install system dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            libasound2-dev \
-            libudev-dev \
-            libxkbcommon-dev \
-            libwayland-dev \
-            libvulkan-dev \
-            pkg-config
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: 1.95
@@ -37,29 +27,19 @@ jobs:
       - name: cargo fmt
         run: cargo fmt --all -- --check
       - name: cargo clippy
-        run: cargo clippy --all-targets -- -D warnings
+        run: cargo clippy -p sim-core -p sim-wasm --all-targets -- -D warnings
 
   test:
     name: Test
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Install system dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            libasound2-dev \
-            libudev-dev \
-            libxkbcommon-dev \
-            libwayland-dev \
-            libvulkan-dev \
-            pkg-config
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: 1.95
       - uses: Swatinem/rust-cache@v2
       - name: cargo test
-        run: cargo test
+        run: cargo test -p sim-core -p sim-wasm
 
   build:
     name: Build (release)

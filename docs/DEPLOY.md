@@ -75,17 +75,15 @@ See `deploy/caddy/Caddyfile.example` for TLS.
 
 ---
 
-## Option C — GitHub Releases
+## Option C — Legacy desktop tarball (manual)
 
-**Continuous (auto):** every `master` push → `.github/workflows/continuous-release.yml` publishes the Linux tarball to the **`continuous`** tag.
-
-**Tagged:**
+CI no longer publishes Linux binaries. To build the legacy Bevy desktop app locally:
 
 ```bash
-git tag v1.0.0 && git push origin v1.0.0
+./scripts/package-release.sh   # → dist/solar-system-navigator-linux-x86_64.tar.gz
 ```
 
-See `.github/workflows/release.yml` for semver releases.
+Upload the tarball to GitHub Releases or your own host if you still ship the desktop build.
 
 ---
 
@@ -121,4 +119,4 @@ cd solar-system-navigator
 2. [ ] Build command `bash scripts/cloudflare-pages-build.sh`, output `dist`
 3. [ ] Custom domain `solar.skg.gg`
 4. [ ] Open `https://solar.skg.gg` in Chrome — sim loads at root
-5. [ ] Linux download works from GitHub Releases (`continuous`)
+5. [ ] (Optional) Legacy desktop tarball hosted separately if you still ship it
