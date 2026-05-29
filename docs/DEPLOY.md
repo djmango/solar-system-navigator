@@ -77,18 +77,36 @@ Run Caddy on `:80` locally or serve files directly with `cloudflared tunnel --ur
 
 ---
 
-## Option B — Cloudflare Pages (landing only)
+## Option B — Cloudflare Pages (landing + CI deploy)
 
-Good for a **fast global landing page**; the game itself is still a **download**, not in-browser.
+Good for a **fast global landing page** at **https://solar.skg.gg**; the game itself is still a **native download**, not in-browser.
 
-1. Connect the GitHub repo to Cloudflare Pages.
-2. **Build settings:**
-   - Build command: `(none or echo ok)`
-   - Build output directory: `deploy/landing`
-3. Custom domain: `solar.skg.gg`
-4. Upload the Linux `.tar.gz` to **GitHub Releases** or **R2** and link from `deploy/landing/index.html`.
+### Automated (recommended)
 
-Pages cannot execute the Rust binary; link to `/releases/...tar.gz` on R2 or GitHub.
+On every push to `master`, GitHub Actions (`.github/workflows/deploy.yml`):
+
+1. Builds the Linux release tarball (`scripts/package-release.sh`)
+2. Publishes it to the **`continuous`** GitHub Release (download link on the landing page)
+3. Deploys `deploy/landing/` to Cloudflare Pages project **`solar`**
+
+**One-time setup:**
+
+1. Cloudflare → **My Profile → API Tokens → Create Token** → template *Edit Cloudflare Workers* (includes Pages) or custom with **Account → Cloudflare Pages → Edit**.
+2. Cloudflare dashboard → any zone → right sidebar **Account ID**.
+3. GitHub repo → **Settings → Secrets and variables → Actions**:
+   - `CLOUDFLARE_API_TOKEN` — token from step 1
+   - `CLOUDFLARE_ACCOUNT_ID` — from step 2
+4. Cloudflare → **Workers & Pages → Create application → Pages → Connect to Git** is **not** required when using the Actions workflow; the first deploy creates project `solar` if missing.
+5. Pages → project **solar** → **Custom domains** → add `solar.skg.gg` (DNS must be on Cloudflare for `skg.gg`).
+
+Manual deploy:
+
+```bash
+chmod +x scripts/deploy-cloudflare-pages.sh
+./scripts/deploy-cloudflare-pages.sh
+```
+
+Pages cannot execute the Rust binary; the landing page links to GitHub Releases.
 
 ### R2 bucket for binaries (optional)
 
@@ -140,8 +158,17 @@ Linux needs Vulkan or Mesa (same as dev). First launch downloads planet textures
 
 ## Quick checklist for `solar.skg.gg`
 
+**Cloudflare Pages (CI):**
+
+1. [ ] Add `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` to GitHub Actions secrets
+2. [ ] Push to `master` (or run **Deploy** workflow manually)
+3. [ ] Add custom domain `solar.skg.gg` on the Pages project
+4. [ ] Test download from the landing page and run binary on a clean Linux machine
+
+**Self-hosted (Proxmox + Caddy):**
+
 1. [ ] Build: `./scripts/build-release.sh && ./scripts/package-release.sh`
-2. [ ] Copy `deploy/landing/*` + tarball to `/var/www/solar.skg.gg`
+2. [ ] Copy `deploy/landing/*` + tarball to `/var/www/solar.skg.gg/releases/`
 3. [ ] Caddy or nginx + TLS
 4. [ ] DNS `solar` → server or Cloudflare Tunnel
 5. [ ] Test download link and run binary on a clean machine

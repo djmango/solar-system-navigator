@@ -1,0 +1,9 @@
+# Static landing page for https://solar.skg.gg
+# Game binary: GitHub Releases (continuous tag), linked from deploy/landing/index.html
+#
+# Manual deploy (after `npm i -g wrangler` and `wrangler login`):
+#   npx wrangler pages deploy deploy/landing --project-name=solar
+
+name = "solar"
+compatibility_date = "2025-05-01"
+pages_build_output_dir = "deploy/landing"

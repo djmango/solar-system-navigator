@@ -1,0 +1,80 @@
+name: Deploy
+
+on:
+  push:
+    branches: [master]
+  workflow_dispatch:
+
+env:
+  SOLAR_TEXTURE_RES: 2k
+
+permissions:
+  contents: write
+
+jobs:
+  build-linux:
+    name: Build Linux release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libasound2-dev \
+            libudev-dev \
+            libxkbcommon-dev \
+            libwayland-dev \
+            libvulkan-dev \
+            pkg-config
+
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.95
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Build and package
+        run: |
+          chmod +x scripts/build-release.sh scripts/package-release.sh
+          ./scripts/package-release.sh
+
+      - name: Upload tarball artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-release
+          path: dist/solar-system-navigator-linux-x86_64.tar.gz
+          retention-days: 14
+
+      - name: Publish continuous release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: continuous
+          name: Continuous (latest master)
+          body: |
+            Auto-built from the latest commit on `master`.
+            Extract and run `./solar-system-navigator` (Linux x86_64, Vulkan/Mesa).
+          prerelease: true
+          make_latest: true
+          files: dist/solar-system-navigator-linux-x86_64.tar.gz
+
+  deploy-pages:
+    name: Deploy to Cloudflare Pages
+    runs-on: ubuntu-latest
+    needs: [build-linux]
+    permissions:
+      contents: read
+      deployments: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Publish landing page
+        uses: cloudflare/pages-action@v1
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          projectName: solar
+          directory: deploy/landing
+          gitHubToken: ${{ secrets.GITHUB_TOKEN }}
+          branch: master

@@ -115,9 +115,9 @@ Output: `artifacts/demo.mp4` (duration matches `SOLAR_DEMO_SECONDS`, default 22s
 
 ## Deploying (e.g. solar.skg.gg)
 
-This is a **native desktop app** today — host a static landing page + Linux download on Proxmox/Caddy or Cloudflare Pages. In-browser play needs a future WASM build.
+This is a **native desktop app** today — a static landing page deploys to **Cloudflare Pages** on every `master` push; Linux builds publish to the **`continuous`** GitHub Release. In-browser play needs a future WASM build (see branch `sully/wasm-webgpu-17fb`).
 
-See **[docs/DEPLOY.md](docs/DEPLOY.md)** for Proxmox, Cloudflare Tunnel, Pages, and GitHub Releases.
+See **[docs/DEPLOY.md](docs/DEPLOY.md)** for Cloudflare secrets, Proxmox/Caddy, and tagged releases.
 
 ```bash
 ./scripts/build-release.sh
