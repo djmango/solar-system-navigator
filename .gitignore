@@ -17,6 +17,9 @@
 *.dylib
 *.so
 
+# WASM / Trunk output
+/dist/
+
 # Bevy specific
 assets/.DS_Store
 

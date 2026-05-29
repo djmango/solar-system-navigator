@@ -90,11 +90,39 @@ impl BodyDef {
     }
 }
 
+pub fn load_scenario_from_str(contents: &str) -> Result<Scenario, String> {
+    toml::from_str(contents).map_err(|e| format!("Failed to parse scenario TOML: {e}"))
+}
+
 pub fn load_scenario(path: impl AsRef<Path>) -> Result<Scenario, String> {
     let path = path.as_ref();
     let contents =
         fs::read_to_string(path).map_err(|e| format!("Failed to read {}: {e}", path.display()))?;
-    toml::from_str(&contents).map_err(|e| format!("Failed to parse {}: {e}", path.display()))
+    load_scenario_from_str(&contents).map_err(|e| format!("{}: {e}", path.display()))
+}
+
+/// Load a scenario from `assets/<relative>` on desktop, or embedded TOML on WASM.
+pub fn load_scenario_relative(relative: &str) -> Result<Scenario, String> {
+    #[cfg(target_arch = "wasm32")]
+    {
+        let contents = scenario_embedded(relative)
+            .ok_or_else(|| format!("scenario not bundled for web: {relative}"))?;
+        return load_scenario_from_str(contents);
+    }
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        load_scenario(scenario_asset_path(relative))
+    }
+}
+
+#[cfg(target_arch = "wasm32")]
+fn scenario_embedded(relative: &str) -> Option<&'static str> {
+    match relative {
+        "scenarios/default.toml" => Some(include_str!("../assets/scenarios/default.toml")),
+        "missions/apollo11.toml" => Some(include_str!("../assets/missions/apollo11.toml")),
+        "missions/osiris_rex.toml" => Some(include_str!("../assets/missions/osiris_rex.toml")),
+        _ => None,
+    }
 }
 
 pub fn scenario_asset_path(relative: &str) -> String {
@@ -138,8 +166,8 @@ mod tests {
 
     #[test]
     fn default_scenario_loads_and_has_circular_speeds() {
-        let path = scenario_asset_path("scenarios/default.toml");
-        let scenario = load_scenario(&path).expect("default scenario should parse");
+        let scenario =
+            load_scenario_relative("scenarios/default.toml").expect("default scenario should parse");
         assert!(scenario.bodies.len() >= 5);
         validate_circular_speeds(&scenario).expect("inner system circular speeds");
     }
@@ -147,8 +175,7 @@ mod tests {
     #[test]
     fn mission_scenarios_load() {
         for rel in ["missions/apollo11.toml", "missions/osiris_rex.toml"] {
-            let path = scenario_asset_path(rel);
-            let scenario = load_scenario(&path).unwrap_or_else(|e| panic!("{rel}: {e}"));
+            let scenario = load_scenario_relative(rel).unwrap_or_else(|e| panic!("{rel}: {e}"));
             assert!(!scenario.bodies.is_empty());
         }
     }

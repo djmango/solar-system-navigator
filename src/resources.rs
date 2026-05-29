@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use bevy::prelude::*;
 
 use crate::scenario::Scenario;
@@ -31,7 +33,7 @@ impl Default for SimulationControl {
         Self {
             speed: crate::astro::DEFAULT_TIME_WARP,
             ticks_per_frame: 4,
-            paused: false,
+            paused: true,
             step_once: false,
         }
     }
@@ -152,9 +154,13 @@ pub struct EditorState {
 
 #[derive(Resource, Debug, Clone)]
 pub struct GameUx {
-    /// Draw full two-body orbit rings for major bodies (heliocentric).
+    /// Draw N-body integrated orbit paths (same physics as simulation).
     pub show_system_orbits: bool,
 }
+
+/// Filled at scenario load; applied to `TruthOrbit` components on the next frame.
+#[derive(Resource, Default)]
+pub struct PendingTruthPaths(pub Option<HashMap<String, Vec<Vec3>>>);
 
 impl Default for GameUx {
     fn default() -> Self {

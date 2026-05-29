@@ -201,7 +201,8 @@ fn sample_escape_arc(mu: f32, state: RelativeState, segments: usize) -> Vec<Vec3
     points
 }
 
-/// Patched two-body propagation for maneuver preview (sequential nodes).
+/// Patched two-body propagation (legacy / tests; runtime previews use N-body in `truth.rs`).
+#[allow(dead_code)]
 pub fn propagate_with_nodes(
     mu: f32,
     mut state: RelativeState,

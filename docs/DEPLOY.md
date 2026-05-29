@@ -112,17 +112,42 @@ Attach the tarball from Actions to the release; link from your landing page.
 
 ---
 
-## Option D — In-browser at `solar.skg.gg` (future)
+## Option D — In-browser at `solar.skg.gg` (WASM + WebGPU)
 
-Requires:
+Build a static site from the `dist/` folder (Trunk bundles WASM, JS, and `assets/`).
 
-- `wasm32-unknown-unknown` target
-- Bevy web features + WebGPU (browser support varies)
-- Trunk or `wasm-pack` pipeline
-- Assets + textures bundled (no `build.rs` curl on WASM)
-- Lower performance and different controls
+**Requirements**
 
-Track as a separate milestone; not required for self-hosting downloads.
+- Rust 1.95+, `wasm32-unknown-unknown`
+- [Trunk](https://trunkrs.dev/) (`cargo install trunk --locked`)
+- **WebGPU** in the browser (Chrome/Edge 113+, or Firefox with WebGPU enabled)
+- 2k planet textures in `assets/textures/` before build (not downloaded during WASM compile)
+
+**Build**
+
+```bash
+./scripts/build-wasm.sh
+# output: dist/index.html + *.wasm + assets/
+```
+
+Serve locally:
+
+```bash
+unset NO_COLOR   # trunk 0.21+ conflicts with NO_COLOR=1 in some CI shells
+trunk serve --no-default-features --features web --open
+```
+
+**Cloudflare Pages**
+
+1. Build command: `./scripts/build-wasm.sh` (or `trunk build --no-default-features --features web`)
+2. Output directory: `dist`
+3. Point `solar.skg.gg` (or a `/play` path) at that deployment
+
+**Notes**
+
+- Scenarios ship embedded in WASM; textures and other assets come from `assets/` via Trunk `copy-dir`.
+- Orbit pre-integration uses fewer samples on WASM for faster load.
+- Native Linux download (options A–C) remains the best performance; browser build is experimental.
 
 ---
 

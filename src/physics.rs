@@ -1,7 +1,10 @@
 use bevy::prelude::*;
 
-use crate::components::{CelestialBody, FixedBody, Mass, OrbitTrail, Position, Velocity};
+use crate::components::{
+    CelestialBody, FixedBody, Mass, OrbitTrail, Position, TruthOrbit, Velocity,
+};
 use crate::resources::{PhysicsConstants, SimulationControl, SimulationDiagnostics};
+use crate::truth::velocity_verlet_step;
 
 #[derive(Debug, Clone)]
 pub struct BodyState {
@@ -69,6 +72,7 @@ pub fn orbital_physics(
         &mut Velocity,
         &mut Transform,
         &mut OrbitTrail,
+        &mut TruthOrbit,
         Option<&FixedBody>,
     )>,
 ) {
@@ -80,10 +84,14 @@ pub fn orbital_physics(
     let steps = simulation_control.ticks_per_frame.max(1);
     simulation_control.step_once = false;
 
+    for (_, _, _, _, _, _, mut truth, _) in bodies.iter_mut() {
+        truth.ensure_live_if_simulating();
+    }
+
     for _ in 0..steps {
         let snapshot: Vec<BodyState> = bodies
             .iter()
-            .map(|(body, mass, pos, vel, _, _, fixed)| BodyState {
+            .map(|(body, mass, pos, vel, _, _, _, fixed)| BodyState {
                 name: body.name.clone(),
                 position: pos.0,
                 velocity: vel.0,
@@ -98,79 +106,24 @@ pub fn orbital_physics(
         diagnostics.potential_energy = pe;
         diagnostics.total_energy = ke + pe;
 
-        let mut accelerations = Vec::with_capacity(snapshot.len());
-        for (index, state) in snapshot.iter().enumerate() {
-            let accel = if state.fixed {
-                Vec3::ZERO
-            } else {
-                gravitational_acceleration(
-                    state.position,
-                    Some(index),
-                    &snapshot,
-                    physics.g,
-                    physics.softening,
-                )
-            };
-            accelerations.push(accel);
-        }
+        let new_state = velocity_verlet_step(&snapshot, physics.g, physics.softening, dt_base);
 
-        // Velocity Verlet: recompute acceleration at the new position.
-        let mut new_positions: Vec<Vec3> = Vec::with_capacity(snapshot.len());
-        let mut new_velocities: Vec<Vec3> = Vec::with_capacity(snapshot.len());
-
-        for (index, state) in snapshot.iter().enumerate() {
-            if state.fixed {
-                new_positions.push(state.position);
-                new_velocities.push(state.velocity);
+        for (body, _, mut pos, mut vel, mut transform, mut trail, mut truth, fixed) in
+            bodies.iter_mut()
+        {
+            let Some(s) = new_state.iter().find(|s| s.name == body.name) else {
                 continue;
-            }
-            let half_dt = dt_base * 0.5;
-            let v_half = state.velocity + accelerations[index] * half_dt;
-            let pos_new = state.position + v_half * dt_base;
-            new_positions.push(pos_new);
-            new_velocities.push(v_half);
-        }
-
-        let new_snapshot: Vec<BodyState> = snapshot
-            .iter()
-            .enumerate()
-            .map(|(i, s)| BodyState {
-                name: s.name.clone(),
-                position: new_positions[i],
-                velocity: new_velocities[i],
-                mass: s.mass,
-                fixed: s.fixed,
-            })
-            .collect();
-
-        let mut accelerations_end = Vec::with_capacity(new_snapshot.len());
-        for (index, state) in new_snapshot.iter().enumerate() {
-            let accel = if state.fixed {
-                Vec3::ZERO
-            } else {
-                gravitational_acceleration(
-                    state.position,
-                    Some(index),
-                    &new_snapshot,
-                    physics.g,
-                    physics.softening,
-                )
             };
-            accelerations_end.push(accel);
-        }
-
-        for (body, _, mut pos, mut vel, mut transform, mut trail, fixed) in bodies.iter_mut() {
             if fixed.is_some() {
                 continue;
             }
-            let Some(i) = snapshot.iter().position(|s| s.name == body.name) else {
-                continue;
-            };
-            let half_dt = dt_base * 0.5;
-            vel.0 = new_velocities[i] + accelerations_end[i] * half_dt;
-            pos.0 = new_positions[i];
+            pos.0 = s.position;
+            vel.0 = s.velocity;
             transform.translation = pos.0;
             trail.push(pos.0);
+            if truth.live_only {
+                truth.push_live(pos.0);
+            }
         }
     }
 }

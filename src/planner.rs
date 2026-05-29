@@ -2,7 +2,9 @@
 
 use bevy::prelude::*;
 
-use crate::components::{CelestialBody, FixedBody, Mass, Position, Probe, SoiRadius, Velocity};
+use crate::components::{
+    CelestialBody, FixedBody, Mass, Position, Probe, SoiRadius, TruthOrbit, Velocity,
+};
 use crate::maneuver::reset_maneuver_execution;
 use crate::orbit::RelativeState;
 use crate::resources::{
@@ -50,7 +52,9 @@ pub fn update_soi_central_body(
         &Position,
         &Velocity,
         &SoiRadius,
+        &TruthOrbit,
         Option<&FixedBody>,
+        Option<&Probe>,
     )>,
 ) {
     if !planner.soi_auto {
@@ -65,26 +69,16 @@ pub fn update_soi_central_body(
         .map(|b| b.name.as_str())
         .unwrap_or("Sun");
 
-    let snapshots: Vec<SoiBodySnapshot> = bodies
-        .iter()
-        .map(|(c, m, p, v, soi, fixed)| SoiBodySnapshot {
-            name: c.name.clone(),
-            position: p.0,
-            velocity: v.0,
-            mass: m.0,
-            soi_radius: soi.0,
-            is_primary: fixed.is_some(),
-        })
-        .collect();
+    let snapshots: Vec<SoiBodySnapshot> = build_soi_snapshots(&bodies);
 
     let target_name = planner.target_body.clone();
     let Some(target_name) = target_name else {
         return;
     };
 
-    let Some((_, _, vessel_pos, _, _, _)) = bodies
+    let Some((_, _, vessel_pos, _, _, _, _, _)) = bodies
         .iter()
-        .find(|(c, _, _, _, _, _)| c.name == target_name)
+        .find(|(c, _, _, _, _, _, _, _)| c.name == target_name)
     else {
         return;
     };
@@ -190,13 +184,14 @@ pub fn build_soi_snapshots(
         &Position,
         &Velocity,
         &SoiRadius,
+        &TruthOrbit,
         Option<&FixedBody>,
         Option<&Probe>,
     )>,
 ) -> Vec<SoiBodySnapshot> {
     bodies
         .iter()
-        .map(|(c, m, p, v, soi, fixed, _probe)| SoiBodySnapshot {
+        .map(|(c, m, p, v, soi, _truth, fixed, _probe)| SoiBodySnapshot {
             name: c.name.clone(),
             position: p.0,
             velocity: v.0,
@@ -207,6 +202,7 @@ pub fn build_soi_snapshots(
         .collect()
 }
 
+#[allow(dead_code)]
 pub fn relative_target_state(
     snapshots: &[SoiBodySnapshot],
     central_name: &str,

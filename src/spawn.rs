@@ -3,16 +3,17 @@ use bevy::prelude::*;
 
 use crate::components::{
     CelestialBody, FixedBody, Mass, OrbitTrail, Position, Probe, SelectedBody, SoiRadius,
-    Starfield, Velocity, VisualRadius,
+    Starfield, TruthOrbit, Velocity, VisualRadius,
 };
 use crate::planner::{compute_soi_radius_for_body, on_simulation_reset};
 use crate::resources::{
-    ActiveScenario, BodyTextureCache, EditorState, HoveredBody, PhysicsConstants, RoutePlanner,
-    SimulationClock, WorldAssets,
+    ActiveScenario, BodyTextureCache, EditorState, HoveredBody, PendingTruthPaths,
+    PhysicsConstants, RoutePlanner, SimulationClock, WorldAssets,
 };
 use crate::scenario::{
-    BodyDef, Scenario, load_scenario, scenario_asset_path, validate_circular_speeds,
+    BodyDef, Scenario, load_scenario_relative, validate_circular_speeds,
 };
+use crate::truth::{TRUTH_PATH_SAMPLES, build_truth_paths_for_scenario};
 
 const SELECTED_SCALE: f32 = 1.2;
 
@@ -29,6 +30,7 @@ pub fn spawn_world(
     mut editor: ResMut<EditorState>,
     mut clock: ResMut<SimulationClock>,
     mut planner: ResMut<RoutePlanner>,
+    mut pending_truth: ResMut<PendingTruthPaths>,
 ) {
     let sphere_mesh = if let Some(assets) = world_assets {
         assets.sphere_mesh.clone()
@@ -67,6 +69,7 @@ pub fn spawn_world(
         .find(|b| b.fixed)
         .map(|b| b.name.clone());
     on_simulation_reset(&mut clock, &mut planner);
+    pending_truth.0 = Some(build_truth_paths_for_scenario(&scenario));
 }
 
 pub fn reload_scenario(
@@ -81,14 +84,14 @@ pub fn reload_scenario(
     mut editor: ResMut<EditorState>,
     mut clock: ResMut<SimulationClock>,
     mut planner: ResMut<RoutePlanner>,
+    mut pending_truth: ResMut<PendingTruthPaths>,
     bodies: Query<Entity, With<CelestialBody>>,
 ) {
     if events.read().next().is_none() {
         return;
     }
 
-    let path = scenario_asset_path(&active.file_path);
-    let scenario = match load_scenario(&path) {
+    let scenario = match load_scenario_relative(&active.file_path) {
         Ok(scenario) => scenario,
         Err(err) => {
             warn!("Scenario reload failed: {err}");
@@ -123,6 +126,21 @@ pub fn reload_scenario(
         .find(|b| b.fixed)
         .map(|b| b.name.clone());
     on_simulation_reset(&mut clock, &mut planner);
+    pending_truth.0 = Some(build_truth_paths_for_scenario(&active.template));
+}
+
+pub fn apply_pending_truth_paths(
+    mut pending: ResMut<PendingTruthPaths>,
+    mut bodies: Query<(&CelestialBody, &mut TruthOrbit)>,
+) {
+    let Some(paths) = pending.0.take() else {
+        return;
+    };
+    for (body, mut truth) in &mut bodies {
+        if let Some(path) = paths.get(&body.name) {
+            truth.load_path(path.clone());
+        }
+    }
 }
 
 fn sync_editor_from_scenario(editor: &mut EditorState, scenario: &Scenario) {
@@ -336,6 +354,7 @@ fn spawn_body(
         Position(position),
         Velocity(def.velocity_vec3()),
         OrbitTrail::new(300),
+        TruthOrbit::new(TRUTH_PATH_SAMPLES * 2),
         VisualRadius(display_r),
         SoiRadius(soi_radius),
     ));

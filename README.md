@@ -68,6 +68,18 @@ Release bundle (binary + `assets/`):
 cd dist/solar-system-navigator && ./solar-system-navigator
 ```
 
+### Browser (WASM + WebGPU)
+
+Requires a **WebGPU** browser and [Trunk](https://trunkrs.dev/):
+
+```bash
+rustup target add wasm32-unknown-unknown
+SOLAR_TEXTURE_RES=2k ./scripts/build-wasm.sh   # → dist/
+trunk serve --no-default-features --features web --open
+```
+
+See [docs/DEPLOY.md](docs/DEPLOY.md) for Cloudflare Pages and `solar.skg.gg` hosting.
+
 ## Project layout
 
 ```

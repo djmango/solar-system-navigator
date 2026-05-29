@@ -59,8 +59,15 @@
     <p class="tag">3D N-body solar system sim · SI physics · KSP-style map &amp; maneuvers</p>
 
     <div class="card">
+      <h2>Play in browser</h2>
+      <p>WebGPU build (Chrome/Edge recommended). Same N-body sim; loads ~40&nbsp;MB with 2k textures.</p>
+      <a class="btn" href="/play/">Launch WASM</a>
+      <p class="note">Host the Trunk <code>dist/</code> output at <code>/play/</code> on your site, or use Cloudflare Pages — see <code>docs/DEPLOY.md</code>.</p>
+    </div>
+
+    <div class="card">
       <h2>Download (Linux)</h2>
-      <p>Native desktop app — Vulkan/OpenGL, ~1280×720. Not a browser build yet.</p>
+      <p>Native desktop app — Vulkan/OpenGL, ~1280×720.</p>
       <a class="btn" href="releases/solar-system-navigator-linux-x86_64.tar.gz">Linux x86_64 (.tar.gz)</a>
       <p class="note">After download: extract, then run <code>./solar-system-navigator</code> from the folder. First run may download planet textures.</p>
     </div>
