@@ -1,8 +1,10 @@
 import { ChevronDown, ChevronUp, Plus, Rocket, Trash2, Zap } from "lucide-react";
-import { getWasmSim, simAction } from "@/sim/useSimulation";
+import { useEffect, useState } from "react";
+import { simDispatch } from "@/sim/useSimulation";
 import { useSimStore } from "@/store/simStore";
 import { formatTime } from "@/lib/units";
 import { KSP_COLORS } from "@/lib/ksp";
+import { isVessel } from "@/lib/vessels";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -13,9 +15,16 @@ export function ManeuverPlanner() {
   const selectedNodeIndex = useSimStore((s) => s.selectedNodeIndex);
   const setSelectedNodeIndex = useSimStore((s) => s.setSelectedNodeIndex);
   const lastHohmann = useSimStore((s) => s.lastHohmann);
-  const setLastHohmann = useSimStore((s) => s.setLastHohmann);
+  const maneuverVessel = useSimStore((s) => s.maneuverVessel);
+  const bodies = useSimStore((s) => s.bodies);
+  const actionNotice = useSimStore((s) => s.actionNotice);
+  const setActionNotice = useSimStore((s) => s.setActionNotice);
 
   if (!planner) return null;
+
+  const target = bodies.find((b) => b.name === maneuverVessel);
+  const canPlan = target ? isVessel(target) : false;
+  const vesselHint = bodies.find((b) => isVessel(b))?.name ?? "vessel";
 
   const editing =
     selectedNodeIndex !== null && planner.nodes[selectedNodeIndex]
@@ -30,9 +39,12 @@ export function ManeuverPlanner() {
 
   const setDv = (p: number, n: number, r: number) => {
     if (selectedNodeIndex !== null) {
-      simAction(() => getWasmSim()?.update_maneuver_node(selectedNodeIndex, p, n, r));
+      simDispatch(
+        { cmd: "update_node", index: selectedNodeIndex, prograde: p, normal: n, radial: r },
+        { sync: "planner" },
+      );
     } else {
-      simAction(() => getWasmSim()?.set_draft_delta_v(p, n, r));
+      simDispatch({ cmd: "set_draft_dv", prograde: p, normal: n, radial: r }, { sync: "planner" });
     }
   };
 
@@ -55,8 +67,23 @@ export function ManeuverPlanner() {
           <span className="font-mono text-amber-300/90">{formatTime(Math.max(0, burnUt - simTime))}</span>
         </div>
         <p className="text-[10px] leading-relaxed text-slate-500">
-          Click an orbit to place a node · drag colored handles on the vessel
+          {canPlan
+            ? `Click ${target?.name ?? vesselHint}'s orbit to place a node · drag handles for Δv`
+            : `Select a vessel (${vesselHint}, …) in View → Vessel to plan burns`}
         </p>
+
+        {actionNotice && (
+          <div className="flex items-start justify-between gap-2 rounded-md border border-sky-800/50 bg-sky-950/40 px-2 py-1.5 text-[10px] text-sky-200">
+            <span>{actionNotice}</span>
+            <button
+              type="button"
+              className="shrink-0 text-sky-400 hover:text-sky-200"
+              onClick={() => setActionNotice(null)}
+            >
+              ×
+            </button>
+          </div>
+        )}
 
         <DvRow
           label="Prograde"
@@ -86,7 +113,14 @@ export function ManeuverPlanner() {
         </div>
 
         <div className="flex flex-wrap gap-1.5">
-          <Button variant="maneuver" size="sm" className="flex-1" title="Add node (B)" onClick={addNode}>
+          <Button
+            variant="maneuver"
+            size="sm"
+            className="flex-1"
+            title="Add node (B)"
+            disabled={!canPlan}
+            onClick={addNode}
+          >
             <Plus className="h-3 w-3" />
             Create node
           </Button>
@@ -95,11 +129,10 @@ export function ManeuverPlanner() {
             size="sm"
             title="Hohmann (H)"
             onClick={() =>
-              simAction(() => {
-                const xfer = getWasmSim()?.compute_hohmann();
-                if (xfer) setLastHohmann(xfer as never);
-                getWasmSim()?.apply_hohmann_departure_draft();
-              })
+              simDispatch([
+                { cmd: "compute_hohmann" },
+                { cmd: "apply_hohmann_departure" },
+              ])
             }
           >
             <Zap className="h-3 w-3" />
@@ -117,7 +150,7 @@ export function ManeuverPlanner() {
               variant="ghost"
               size="sm"
               className="mt-1 h-6 w-full text-amber-300"
-              onClick={() => simAction(() => getWasmSim()?.add_hohmann_maneuver_pair())}
+              onClick={() => simDispatch({ cmd: "add_hohmann_pair" })}
             >
               Shift+H · Add burn pair
             </Button>
@@ -144,9 +177,12 @@ export function ManeuverPlanner() {
                       } ${n.executed ? "opacity-45 line-through" : ""}`}
                       onClick={() => {
                         setSelectedNodeIndex(i);
-                        simAction(() =>
-                          getWasmSim()?.set_draft_delta_v(n.prograde, n.normal, n.radial),
-                        );
+                        simDispatch({
+                          cmd: "set_draft_dv",
+                          prograde: n.prograde,
+                          normal: n.normal,
+                          radial: n.radial,
+                        });
                       }}
                     >
                       <span className="font-mono">MN{i + 1}</span>
@@ -163,7 +199,7 @@ export function ManeuverPlanner() {
                 size="sm"
                 className="w-full"
                 onClick={() => {
-                  simAction(() => getWasmSim()?.remove_maneuver_node(selectedNodeIndex));
+                  simDispatch({ cmd: "remove_node", index: selectedNodeIndex });
                   setSelectedNodeIndex(null);
                 }}
               >
@@ -178,12 +214,20 @@ export function ManeuverPlanner() {
 }
 
 function addNode() {
-  simAction(() => getWasmSim()?.add_maneuver_node());
-  useSimStore.getState().setSelectedNodeIndex(null);
+  simDispatch(
+    { cmd: "add_node" },
+    {
+      notice: "Maneuver node created",
+      onComplete: () => {
+        const n = useSimStore.getState().planner?.nodes.length ?? 0;
+        if (n > 0) useSimStore.getState().setSelectedNodeIndex(n - 1);
+      },
+    },
+  );
 }
 
 function clearNodes() {
-  simAction(() => getWasmSim()?.clear_maneuver_nodes());
+  simDispatch({ cmd: "clear_nodes" });
   useSimStore.getState().setSelectedNodeIndex(null);
 }
 
@@ -200,6 +244,12 @@ function DvRow({
   onChange: (v: number) => void;
   onNudge: (delta: number) => void;
 }) {
+  const [local, setLocal] = useState(String(Math.round(value)));
+
+  useEffect(() => {
+    setLocal(String(Math.round(value)));
+  }, [value]);
+
   return (
     <div className="rounded-md border border-slate-700/50 bg-slate-900/50 p-2">
       <div className="mb-1 flex items-center gap-2">
@@ -213,8 +263,15 @@ function DvRow({
         <input
           type="number"
           step={10}
-          value={Math.round(value)}
-          onChange={(e) => onChange(Number(e.target.value))}
+          value={local}
+          onChange={(e) => setLocal(e.target.value)}
+          onBlur={() => onChange(Number(local) || 0)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              onChange(Number(local) || 0);
+              (e.target as HTMLInputElement).blur();
+            }
+          }}
           className="h-8 min-w-0 flex-1 rounded-md border border-slate-600 bg-slate-950 px-2 text-center font-mono text-sm text-slate-100 focus:border-sky-600 focus:outline-none focus:ring-1 focus:ring-sky-600/40"
         />
         <Button variant="secondary" size="icon" className="h-7 w-7 shrink-0" onClick={() => onNudge(50)}>

@@ -1,13 +1,20 @@
 import { useEffect } from "react";
-import { getWasmSim, reloadScenarioByIndex, simAction } from "@/sim/useSimulation";
-import { SCENARIO_CATALOG } from "@/lib/scenarios";
+import { reloadScenarioByIndex, resetSimUiAfterReset, simDispatch } from "@/sim/useSimulation";
 import { useSimStore } from "@/store/simStore";
 import { warpDown, warpUp, WARP_LEVELS } from "@/lib/ksp";
+import { isVessel } from "@/lib/vessels";
 
 function isTypingTarget(target: EventTarget | null): boolean {
   if (!(target instanceof HTMLElement)) return false;
   const tag = target.tagName;
   return tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || target.isContentEditable;
+}
+
+function hasManeuverVessel(store: ReturnType<typeof useSimStore.getState>): boolean {
+  const name = store.maneuverVessel;
+  if (!name) return false;
+  const body = store.bodies.find((b) => b.name === name);
+  return body ? isVessel(body) : false;
 }
 
 export function useKeyboardShortcuts() {
@@ -20,7 +27,6 @@ export function useKeyboardShortcuts() {
       if (isTypingTarget(e.target)) return;
 
       const store = useSimStore.getState();
-      const sim = getWasmSim();
 
       switch (e.code) {
         case "Space":
@@ -48,7 +54,6 @@ export function useKeyboardShortcuts() {
         case "Tab":
           e.preventDefault();
           store.cycleSelection(e.shiftKey);
-          simAction(() => sim?.set_target_body(useSimStore.getState().selectedBody ?? "Earth"));
           break;
         case "KeyG":
           store.setFollowSelection(!store.followSelection);
@@ -57,41 +62,48 @@ export function useKeyboardShortcuts() {
           if (store.selectedBody) store.focusBody(store.selectedBody);
           break;
         case "KeyB":
-          simAction(() => sim?.add_maneuver_node());
+          if (!hasManeuverVessel(store)) {
+            store.setActionNotice("Select a vessel in View to plan maneuvers.");
+            break;
+          }
+          simDispatch(
+            { cmd: "add_node" },
+            {
+              notice: "Maneuver node created",
+              onComplete: () => {
+                const n = useSimStore.getState().planner?.nodes.length ?? 0;
+                if (n > 0) store.setSelectedNodeIndex(n - 1);
+              },
+            },
+          );
           break;
         case "KeyC":
-          simAction(() => sim?.clear_maneuver_nodes());
+          simDispatch({ cmd: "clear_nodes" });
           store.setSelectedNodeIndex(null);
           break;
-        case "KeyV": {
-          const next = !store.showOrbits;
-          store.setShowOrbits(next);
-          simAction(() => {
-            const s = getWasmSim();
-            if (!s) return;
-            const p = s.planner_state() as { nodes: unknown[] };
-            s.set_show_previews(next || p.nodes.length > 0);
-          });
+        case "KeyV":
+          store.setShowOrbits(!store.showOrbits);
           break;
-        }
         case "KeyO":
           store.setSoiAuto(!store.soiAuto);
-          simAction(() => sim?.set_soi_auto(useSimStore.getState().soiAuto));
           break;
         case "KeyN":
-          simAction(() => sim?.step_once());
+          simDispatch({ cmd: "step_once" });
           break;
         case "KeyR":
-          simAction(() => sim?.reset());
-          store.setSelectedNodeIndex(null);
+          simDispatch({ cmd: "reset" });
+          resetSimUiAfterReset();
           break;
         case "KeyH":
-          simAction(() => {
-            const xfer = sim?.compute_hohmann();
-            if (xfer) store.setLastHohmann(xfer as never);
-            if (e.shiftKey && xfer) sim?.add_hohmann_maneuver_pair();
-            else if (xfer) sim?.apply_hohmann_departure_draft();
-          });
+          if (!hasManeuverVessel(store)) {
+            store.setActionNotice("Select a vessel in View for Hohmann planning.");
+            break;
+          }
+          if (e.shiftKey) {
+            simDispatch([{ cmd: "compute_hohmann" }, { cmd: "add_hohmann_pair" }]);
+          } else {
+            simDispatch([{ cmd: "compute_hohmann" }, { cmd: "apply_hohmann_departure" }]);
+          }
           break;
         case "Slash":
           if (e.shiftKey) {

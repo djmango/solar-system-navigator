@@ -54,6 +54,17 @@ atmosphere = [0.35, 0.55, 0.95]
 texture = "textures/earth.jpg"
 
 [[bodies]]
+name = "Scout"
+mass = 1200.0
+position = [1.495978707e11, 8.0e6, 0.0]
+velocity = [0.0, 0.0, 29820.0]
+radius = 50.0
+visual_radius = 8.0e8
+color = [0.92, 0.96, 1.0]
+emissive = 0.85
+probe = true
+
+[[bodies]]
 name = "Mars"
 mass = 6.4171e23
 position = [2.279e11, 0.0, 0.0]

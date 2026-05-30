@@ -77,3 +77,6 @@ jobs:
         run: cargo install wasm-pack --locked
       - name: Build web app
         run: bash scripts/cloudflare-pages-build.sh
+      - name: Typecheck web app
+        run: npm run typecheck
+        working-directory: web

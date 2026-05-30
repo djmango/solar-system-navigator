@@ -6,6 +6,7 @@
     "build:wasm": "wasm-pack build ../crates/sim-wasm --target web --out-dir ../../web/src/sim/pkg --release",
     "dev": "npm run build:wasm && vite",
     "build": "npm run build:wasm && vite build",
+    "typecheck": "tsc --noEmit",
     "preview": "vite preview"
   },
   "dependencies": {

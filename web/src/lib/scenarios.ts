@@ -10,7 +10,7 @@ export const SCENARIO_CATALOG: ScenarioEntry[] = [
     id: 0,
     label: "Inner System (SI)",
     path: "/assets/scenarios/default.toml",
-    defaultTarget: "Earth",
+    defaultTarget: "Scout",
   },
   {
     id: 1,

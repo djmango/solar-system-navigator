@@ -3,15 +3,17 @@ import { VesselHud } from "./ui/VesselHud";
 import { ManeuverPlanner } from "./ui/ManeuverPlanner";
 import { ViewControls } from "./ui/ViewControls";
 import { SolarScene } from "./scene/SolarScene";
-import { useSimulationLoop } from "./sim/useSimulation";
+import { useSimulationLoop, retryScene } from "./sim/useSimulation";
 import { useKeyboardShortcuts } from "./hooks/useKeyboardShortcuts";
 import { useSimStore } from "./store/simStore";
+import { Button } from "./components/ui/button";
 
 export default function App() {
   useSimulationLoop();
   useKeyboardShortcuts();
   const ready = useSimStore((s) => s.ready);
   const error = useSimStore((s) => s.error);
+  const sceneFault = useSimStore((s) => s.sceneFault);
 
   if (error) {
     return (
@@ -31,6 +33,20 @@ export default function App() {
         </div>
       )}
       <SolarScene />
+      {sceneFault && (
+        <div className="pointer-events-auto absolute left-1/2 top-1/2 z-30 w-[min(90vw,22rem)] -translate-x-1/2 -translate-y-1/2 rounded-lg border border-rose-800/60 bg-rose-950/90 p-4 text-center shadow-xl">
+          <p className="text-sm font-medium text-rose-100">Scene stopped</p>
+          <p className="mt-2 text-xs text-rose-200/80">{sceneFault}</p>
+          <div className="mt-3 flex justify-center gap-2">
+            <Button variant="secondary" size="sm" onClick={() => retryScene()}>
+              Retry scene
+            </Button>
+            <Button variant="ghost" size="sm" onClick={() => window.location.reload()}>
+              Reload page
+            </Button>
+          </div>
+        </div>
+      )}
       {ready && (
         <div className="pointer-events-none absolute inset-0 z-10">
           <TimeWarpBar />

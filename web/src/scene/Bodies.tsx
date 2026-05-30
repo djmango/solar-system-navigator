@@ -7,6 +7,7 @@ import { toScene } from "@/lib/units";
 import type { BodySnapshot } from "@/lib/units";
 import { loadPlanetTexture } from "./textureCache";
 import { bodyDefsRef, sceneBodiesRef } from "@/sim/sceneRefs";
+import { isVessel } from "@/lib/vessels";
 
 const SPHERE = new THREE.SphereGeometry(1, 32, 32);
 const ATMOSPHERE = new THREE.SphereGeometry(1, 20, 20);
@@ -16,9 +17,9 @@ function BodyMesh({ def }: { def: BodySnapshot }) {
   const surfaceRef = useRef<THREE.MeshBasicMaterial>(null);
   const selectedBody = useSimStore((s) => s.selectedBody);
   const focusBody = useSimStore((s) => s.focusBody);
-  const setSelectedBody = useSimStore((s) => s.setSelectedBody);
 
   const radius = Math.max(toScene(def.display_radius), 0.003);
+  const pickScale = isVessel(def) ? Math.max(radius * 3, 0.025) : Math.max(radius * 2, 0.04);
   const color = new THREE.Color(def.color[0], def.color[1], def.color[2]);
   const selected = def.name === selectedBody;
   const url = def.texture ? `/assets/${def.texture}` : null;
@@ -51,7 +52,14 @@ function BodyMesh({ def }: { def: BodySnapshot }) {
 
   const onSelect = (e: ThreeEvent<MouseEvent>) => {
     e.stopPropagation();
-    setSelectedBody(def.name);
+    focusBody(def.name);
+    if (isVessel(def)) {
+      useSimStore.getState().setManeuverVessel(def.name);
+    } else {
+      useSimStore
+        .getState()
+        .setActionNotice("Framed planet — pick a vessel in View to plan maneuvers.");
+    }
   };
 
   const onFocus = (e: ThreeEvent<MouseEvent>) => {
@@ -62,7 +70,7 @@ function BodyMesh({ def }: { def: BodySnapshot }) {
   return (
     <group ref={groupRef}>
       {/* Pick target — modest size, invisible */}
-      <mesh scale={Math.max(radius * 2, 0.04)} onClick={onSelect} onDoubleClick={onFocus}>
+      <mesh scale={pickScale} onClick={onSelect} onDoubleClick={onFocus}>
         <primitive object={SPHERE} attach="geometry" />
         <meshBasicMaterial visible={false} />
       </mesh>

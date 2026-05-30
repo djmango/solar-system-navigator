@@ -68,19 +68,22 @@ Release bundle (binary + `assets/`):
 cd dist/solar-system-navigator && ./solar-system-navigator
 ```
 
-### Browser (WASM + WebGPU)
+### Browser (WASM + Three.js)
 
-Requires a **WebGPU** browser and [Trunk](https://trunkrs.dev/):
+Requires a modern browser with WebGL2:
 
 ```bash
-rustup target add wasm32-unknown-unknown
-SOLAR_TEXTURE_RES=2k ./scripts/build-wasm.sh   # → dist/
-trunk serve --no-default-features --features web --open
+cd web
+npm install
+npm run dev          # local dev (wasm-pack + Vite)
+npm run build        # production → ../dist/
 ```
+
+Production deploy uses `scripts/cloudflare-pages-build.sh` (same as CI).
 
 Live demo: **[solar.skg.gg](https://solar.skg.gg)** (game loads at `/`).
 
-See [docs/DEPLOY.md](docs/DEPLOY.md) for Cloudflare Pages / Wrangler.
+See [docs/DEPLOY.md](docs/DEPLOY.md) for Cloudflare Pages / Wrangler. Legacy Trunk/WebGPU build: `scripts/build-wasm.sh`.
 
 ## Project layout
 

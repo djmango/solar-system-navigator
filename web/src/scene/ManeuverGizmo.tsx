@@ -1,3 +1,4 @@
+import { Line } from "@react-three/drei";
 import { useMemo, useRef, useState } from "react";
 import { useFrame, useThree } from "@react-three/fiber";
 import type { ThreeEvent } from "@react-three/fiber";
@@ -6,8 +7,9 @@ import { useSimStore } from "@/store/simStore";
 import { toScene } from "@/lib/units";
 import { KSP_COLORS } from "@/lib/ksp";
 import { axisDragDelta, tnwFrameForVessel } from "@/lib/orbitPick";
-import { getWasmSim, simAction } from "@/sim/useSimulation";
+import { simDispatch } from "@/sim/useSimulation";
 import { sceneBodiesRef } from "@/sim/sceneRefs";
+import { isVessel } from "@/lib/vessels";
 
 type Axis = "prograde" | "normal" | "radial";
 
@@ -17,20 +19,28 @@ const AXES: { key: Axis; color: string }[] = [
   { key: "radial", color: KSP_COLORS.radial },
 ];
 
-/** KSP-style TNW Δv handles — scaled to vessel, offset outside surface. */
+const GIZMO_ARROW_LEN = 0.045;
+const GIZMO_HANDLE_SCALE = 0.004;
+
+/** KSP-style TNW Δv handles — only on vessels; WASM updated on pointer up. */
 export function ManeuverGizmo() {
   const groupRef = useRef<THREE.Group>(null);
-  const selectedBody = useSimStore((s) => s.selectedBody);
+  const maneuverVessel = useSimStore((s) => s.maneuverVessel);
   const planner = useSimStore((s) => s.planner);
   const selectedNodeIndex = useSimStore((s) => s.selectedNodeIndex);
   const showGizmo = useSimStore((s) => s.showOrbits);
+  const [dragValues, setDragValues] = useState<{
+    prograde: number;
+    normal: number;
+    radial: number;
+  } | null>(null);
 
   const editing =
     selectedNodeIndex !== null && planner?.nodes[selectedNodeIndex]
       ? planner.nodes[selectedNodeIndex]
       : null;
 
-  const values = useMemo(
+  const baseValues = useMemo(
     () => ({
       prograde: editing?.prograde ?? planner?.draft_prograde ?? 0,
       normal: editing?.normal ?? planner?.draft_normal ?? 0,
@@ -39,9 +49,11 @@ export function ManeuverGizmo() {
     [editing, planner],
   );
 
+  const values = dragValues ?? baseValues;
+
   useFrame(() => {
-    if (!groupRef.current || !selectedBody) return;
-    const vessel = sceneBodiesRef.current.find((b) => b.name === selectedBody);
+    if (!groupRef.current || !maneuverVessel) return;
+    const vessel = sceneBodiesRef.current.find((b) => b.name === maneuverVessel);
     if (!vessel) return;
     groupRef.current.position.set(
       toScene(vessel.position[0]),
@@ -50,26 +62,42 @@ export function ManeuverGizmo() {
     );
   });
 
-  if (!showGizmo || !selectedBody || !planner) return null;
+  if (!showGizmo || !maneuverVessel || !planner) return null;
 
-  const vessel = sceneBodiesRef.current.find((b) => b.name === selectedBody);
+  const vessel = sceneBodiesRef.current.find((b) => b.name === maneuverVessel);
+  if (!vessel || !isVessel(vessel)) return null;
+
   const central = planner.central_body ?? "Sun";
-  const frame = vessel ? tnwFrameForVessel(sceneBodiesRef.current, vessel.name, central) : null;
-  if (!vessel || !frame) return null;
+  const frame = tnwFrameForVessel(sceneBodiesRef.current, vessel.name, central);
+  if (!frame) return null;
 
-  const bodyRadius = Math.max(toScene(vessel.display_radius), 0.003);
-  const handleScale = Math.min(bodyRadius * 0.35, 0.008);
-  const arrowLen = bodyRadius * 2.5;
-
-  const setAxisValue = (axis: Axis, value: number) => {
-    const p = axis === "prograde" ? value : values.prograde;
-    const n = axis === "normal" ? value : values.normal;
-    const r = axis === "radial" ? value : values.radial;
+  const commitValues = (next: { prograde: number; normal: number; radial: number }) => {
+    setDragValues(null);
     if (selectedNodeIndex !== null) {
-      simAction(() => getWasmSim()?.update_maneuver_node(selectedNodeIndex, p, n, r));
+      simDispatch(
+        {
+          cmd: "update_node",
+          index: selectedNodeIndex,
+          prograde: next.prograde,
+          normal: next.normal,
+          radial: next.radial,
+        },
+        { sync: "planner" },
+      );
     } else {
-      simAction(() => getWasmSim()?.set_draft_delta_v(p, n, r));
+      simDispatch(
+        { cmd: "set_draft_dv", prograde: next.prograde, normal: next.normal, radial: next.radial },
+        { sync: "planner" },
+      );
     }
+  };
+
+  const previewValues = (axis: Axis, value: number) => {
+    setDragValues({
+      prograde: axis === "prograde" ? value : values.prograde,
+      normal: axis === "normal" ? value : values.normal,
+      radial: axis === "radial" ? value : values.radial,
+    });
   };
 
   return (
@@ -78,8 +106,10 @@ export function ManeuverGizmo() {
         const val = values[key];
         const dir = (key === "prograde" ? frame.tHat : key === "normal" ? frame.nHat : frame.rHat).clone();
         const sign = Math.sign(val) || 1;
-        const end = dir.clone().multiplyScalar(arrowLen * sign * (0.5 + Math.min(Math.abs(val) / 2000, 1)));
-        const axisDir = (key === "prograde" ? frame.tHat : key === "normal" ? frame.nHat : frame.rHat).clone().normalize();
+        const end = dir.clone().multiplyScalar(GIZMO_ARROW_LEN * sign * (0.5 + Math.min(Math.abs(val) / 2000, 1)));
+        const axisDir = (key === "prograde" ? frame.tHat : key === "normal" ? frame.nHat : frame.rHat)
+          .clone()
+          .normalize();
         return (
           <group key={key}>
             <AxisLine end={end} color={color} />
@@ -87,9 +117,9 @@ export function ManeuverGizmo() {
               position={end}
               color={color}
               axis={axisDir}
-              handleScale={handleScale}
               value={val}
-              onChange={(v) => setAxisValue(key, v)}
+              onPreview={(v) => previewValues(key, v)}
+              onCommit={(v) => commitValues({ ...values, [key]: v })}
             />
           </group>
         );
@@ -99,14 +129,23 @@ export function ManeuverGizmo() {
 }
 
 function AxisLine({ end, color }: { end: THREE.Vector3; color: string }) {
-  const geom = useMemo(
-    () => new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0, 0, 0), end]),
+  const points = useMemo(
+    () =>
+      [
+        [0, 0, 0],
+        [end.x, end.y, end.z],
+      ] as [number, number, number][],
     [end.x, end.y, end.z],
   );
   return (
-    <line geometry={geom}>
-      <lineBasicMaterial color={color} transparent opacity={0.7} depthWrite={false} toneMapped={false} />
-    </line>
+    <Line
+      points={points}
+      color={color}
+      transparent
+      opacity={0.7}
+      depthWrite={false}
+      toneMapped={false}
+    />
   );
 }
 
@@ -114,21 +153,22 @@ function DvDragHandle({
   position,
   color,
   axis,
-  handleScale,
   value,
-  onChange,
+  onPreview,
+  onCommit,
 }: {
   position: THREE.Vector3;
   color: string;
   axis: THREE.Vector3;
-  handleScale: number;
   value: number;
-  onChange: (v: number) => void;
+  onPreview: (v: number) => void;
+  onCommit: (v: number) => void;
 }) {
   const { camera } = useThree();
   const groupRef = useRef<THREE.Group>(null);
   const dragging = useRef(false);
   const startValue = useRef(value);
+  const currentValue = useRef(value);
   const [active, setActive] = useState(false);
   const origin = useRef(new THREE.Vector3());
 
@@ -141,8 +181,9 @@ function DvDragHandle({
   const onDown = (e: ThreeEvent<PointerEvent>) => {
     e.stopPropagation();
     dragging.current = true;
-    setActive(true);
     startValue.current = value;
+    currentValue.current = value;
+    setActive(true);
     (e.target as HTMLElement).setPointerCapture(e.pointerId);
   };
 
@@ -150,7 +191,9 @@ function DvDragHandle({
     if (!dragging.current) return;
     e.stopPropagation();
     const delta = axisDragDelta(axis, origin.current, e.movementX, e.movementY, camera, 2.5);
-    onChange(startValue.current + delta);
+    const next = startValue.current + delta;
+    currentValue.current = next;
+    onPreview(next);
   };
 
   const onUp = (e: ThreeEvent<PointerEvent>) => {
@@ -158,20 +201,21 @@ function DvDragHandle({
     dragging.current = false;
     setActive(false);
     (e.target as HTMLElement).releasePointerCapture(e.pointerId);
+    onCommit(currentValue.current);
   };
 
   return (
     <group ref={groupRef} position={position}>
       <mesh
-        scale={active ? handleScale * 1.3 : handleScale}
+        scale={active ? GIZMO_HANDLE_SCALE * 1.25 : GIZMO_HANDLE_SCALE}
         onPointerDown={onDown}
         onPointerMove={onMove}
         onPointerUp={onUp}
         onPointerOver={() => setActive(true)}
         onPointerOut={() => !dragging.current && setActive(false)}
       >
-        <sphereGeometry args={[1, 12, 12]} />
-        <meshBasicMaterial color={color} toneMapped={false} depthTest={false} transparent opacity={0.95} />
+        <sphereGeometry args={[1, 10, 10]} />
+        <meshBasicMaterial color={color} toneMapped={false} transparent opacity={0.95} />
       </mesh>
     </group>
   );

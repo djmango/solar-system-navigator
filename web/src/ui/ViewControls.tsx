@@ -1,7 +1,8 @@
 import { Eye, EyeOff, HelpCircle, Orbit, Target } from "lucide-react";
 import { useSimStore } from "@/store/simStore";
-import { getWasmSim, reloadScenarioByIndex, simAction } from "@/sim/useSimulation";
+import { reloadScenarioByIndex } from "@/sim/useSimulation";
 import { SCENARIO_CATALOG } from "@/lib/scenarios";
+import { vesselBodies } from "@/lib/vessels";
 import { KSP_SHORTCUTS } from "@/lib/ksp";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -16,10 +17,10 @@ export function ViewControls() {
   const showShortcuts = useSimStore((s) => s.showShortcuts);
   const setShowShortcuts = useSimStore((s) => s.setShowShortcuts);
   const bodies = useSimStore((s) => s.bodies);
-  const selectedBody = useSimStore((s) => s.selectedBody);
-  const setSelectedBody = useSimStore((s) => s.setSelectedBody);
-  const focusBody = useSimStore((s) => s.focusBody);
+  const maneuverVessel = useSimStore((s) => s.maneuverVessel);
+  const selectManeuverVessel = useSimStore((s) => s.selectManeuverVessel);
   const scenarioIndex = useSimStore((s) => s.scenarioIndex);
+  const vessels = vesselBodies(bodies);
 
   return (
     <>
@@ -32,16 +33,7 @@ export function ViewControls() {
             icon={showOrbits ? Eye : EyeOff}
             label="Orbit paths (V)"
             active={showOrbits}
-            onClick={() => {
-              const next = !showOrbits;
-              setShowOrbits(next);
-              simAction(() => {
-                const sim = getWasmSim();
-                if (!sim) return;
-                const p = sim.planner_state() as { nodes: unknown[] };
-                sim.set_show_previews(next || p.nodes.length > 0);
-              });
-            }}
+            onClick={() => setShowOrbits(!showOrbits)}
           />
           <ToggleRow
             icon={Target}
@@ -53,11 +45,7 @@ export function ViewControls() {
             icon={Orbit}
             label="SOI auto (O)"
             active={soiAuto}
-            onClick={() => {
-              const next = !soiAuto;
-              setSoiAuto(next);
-              simAction(() => getWasmSim()?.set_soi_auto(next));
-            }}
+            onClick={() => setSoiAuto(!soiAuto)}
           />
 
           <label className="block text-[10px] text-slate-500">
@@ -79,15 +67,10 @@ export function ViewControls() {
             Vessel
             <select
               className="mt-0.5 w-full rounded-md border border-slate-600 bg-slate-950 px-2 py-1 text-xs text-slate-200"
-              value={selectedBody ?? ""}
-              onChange={(e) => {
-                const name = e.target.value;
-                setSelectedBody(name);
-                focusBody(name);
-                simAction(() => getWasmSim()?.set_target_body(name));
-              }}
+              value={maneuverVessel ?? vessels[0]?.name ?? ""}
+              onChange={(e) => selectManeuverVessel(e.target.value)}
             >
-              {bodies.filter((b) => !b.fixed).map((b) => (
+              {vessels.map((b) => (
                 <option key={b.name} value={b.name}>
                   {b.name}
                 </option>

@@ -1,5 +1,5 @@
 import { Gauge, Pause, Play, RotateCcw, StepForward } from "lucide-react";
-import { getWasmSim, simAction } from "@/sim/useSimulation";
+import { resetSimUiAfterReset, simDispatch } from "@/sim/useSimulation";
 import { useSimStore } from "@/store/simStore";
 import { formatWarp, WARP_LEVELS } from "@/lib/ksp";
 import { formatTime } from "@/lib/units";
@@ -56,7 +56,7 @@ export function TimeWarpBar() {
             size="icon"
             variant="secondary"
             title="Step (N)"
-            onClick={() => simAction(() => getWasmSim()?.step_once())}
+            onClick={() => simDispatch({ cmd: "step_once" })}
           >
             <StepForward className="h-3.5 w-3.5" />
           </Button>
@@ -64,7 +64,10 @@ export function TimeWarpBar() {
             size="icon"
             variant="secondary"
             title="Reset (R)"
-            onClick={() => simAction(() => getWasmSim()?.reset())}
+            onClick={() => {
+              simDispatch({ cmd: "reset" });
+              resetSimUiAfterReset();
+            }}
           >
             <RotateCcw className="h-3.5 w-3.5" />
           </Button>
