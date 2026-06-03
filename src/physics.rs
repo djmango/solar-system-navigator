@@ -3,8 +3,10 @@ use bevy::prelude::*;
 use crate::components::{
     CelestialBody, FixedBody, Mass, OrbitTrail, Position, TruthOrbit, Velocity,
 };
-use crate::resources::{PhysicsConstants, SimulationControl, SimulationDiagnostics};
-use crate::truth::velocity_verlet_step;
+use crate::resources::{
+    PhysicsConstants, RoutePlanner, SimulationClock, SimulationControl, SimulationDiagnostics,
+};
+use crate::truth::advance_state_with_maneuvers;
 
 #[derive(Debug, Clone)]
 pub struct BodyState {
@@ -64,6 +66,8 @@ pub fn orbital_physics(
     time: Res<Time>,
     physics: Res<PhysicsConstants>,
     mut simulation_control: ResMut<SimulationControl>,
+    mut clock: ResMut<SimulationClock>,
+    mut planner: ResMut<RoutePlanner>,
     mut diagnostics: ResMut<SimulationDiagnostics>,
     mut bodies: Query<(
         &CelestialBody,
@@ -88,42 +92,53 @@ pub fn orbital_physics(
         truth.ensure_live_if_simulating();
     }
 
+    let mut state: Vec<BodyState> = bodies
+        .iter()
+        .map(|(body, mass, pos, vel, _, _, _, fixed)| BodyState {
+            name: body.name.clone(),
+            position: pos.0,
+            velocity: vel.0,
+            mass: mass.0,
+            fixed: fixed.is_some(),
+        })
+        .collect();
+
+    let central = planner.central_body.clone();
+    let target = planner.target_body.clone();
+
     for _ in 0..steps {
-        let snapshot: Vec<BodyState> = bodies
-            .iter()
-            .map(|(body, mass, pos, vel, _, _, _, fixed)| BodyState {
-                name: body.name.clone(),
-                position: pos.0,
-                velocity: vel.0,
-                mass: mass.0,
-                fixed: fixed.is_some(),
-            })
-            .collect();
+        clock.time = advance_state_with_maneuvers(
+            &mut state,
+            &mut planner.nodes,
+            central.as_deref(),
+            target.as_deref(),
+            clock.time,
+            dt_base,
+            physics.g,
+            physics.softening,
+        );
+    }
 
-        diagnostics.body_count = snapshot.len() as u32;
-        let (ke, pe) = total_energy(&snapshot, physics.g, physics.softening);
-        diagnostics.kinetic_energy = ke;
-        diagnostics.potential_energy = pe;
-        diagnostics.total_energy = ke + pe;
+    diagnostics.body_count = state.len() as u32;
+    let (ke, pe) = total_energy(&state, physics.g, physics.softening);
+    diagnostics.kinetic_energy = ke;
+    diagnostics.potential_energy = pe;
+    diagnostics.total_energy = ke + pe;
 
-        let new_state = velocity_verlet_step(&snapshot, physics.g, physics.softening, dt_base);
-
-        for (body, _, mut pos, mut vel, mut transform, mut trail, mut truth, fixed) in
-            bodies.iter_mut()
-        {
-            let Some(s) = new_state.iter().find(|s| s.name == body.name) else {
-                continue;
-            };
-            if fixed.is_some() {
-                continue;
-            }
-            pos.0 = s.position;
-            vel.0 = s.velocity;
-            transform.translation = pos.0;
-            trail.push(pos.0);
-            if truth.live_only {
-                truth.push_live(pos.0);
-            }
+    for (body, _, mut pos, mut vel, mut transform, mut trail, mut truth, fixed) in bodies.iter_mut()
+    {
+        let Some(s) = state.iter().find(|s| s.name == body.name) else {
+            continue;
+        };
+        if fixed.is_some() {
+            continue;
+        }
+        pos.0 = s.position;
+        vel.0 = s.velocity;
+        transform.translation = pos.0;
+        trail.push(pos.0);
+        if truth.live_only {
+            truth.push_live(pos.0);
         }
     }
 }

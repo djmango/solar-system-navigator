@@ -6,7 +6,6 @@ mod components;
 mod demo;
 mod input;
 mod interaction;
-mod maneuver;
 mod map_view;
 mod orbit;
 mod physics;
@@ -25,16 +24,15 @@ use camera::{demo_orbit_camera, focus_camera_on_selection, orbit_camera_system, 
 use demo::{demo_auto_exit, demo_scenario_cycler, demo_simulation_tuning};
 use input::keyboard_controls;
 use interaction::{
-    body_pick_on_click, focus_primary_hotkey, frame_camera_hotkey, update_body_hover, ClickTracker,
+    ClickTracker, body_pick_on_click, focus_primary_hotkey, frame_camera_hotkey, update_body_hover,
 };
-use maneuver::execute_maneuver_burns;
 use map_view::{draw_orbit_previews, map_mode_camera, toggle_map_mode};
 use physics::orbital_physics;
-use planner::{advance_simulation_clock, sync_route_planner_targets, update_soi_central_body};
+use planner::{sync_route_planner_targets, update_soi_central_body};
 use resources::{
     ActiveScenario, BodyTextureCache, CameraInputState, DemoRecorder, GameUx, HoveredBody,
-    MapViewMode, PendingTruthPaths, PhysicsConstants, ReloadScenario, RoutePlanner, ScenarioCatalog,
-    SimulationClock, SimulationControl, SimulationDiagnostics, SpawnProbe,
+    MapViewMode, PendingTruthPaths, PhysicsConstants, ReloadScenario, RoutePlanner,
+    ScenarioCatalog, SimulationClock, SimulationControl, SimulationDiagnostics, SpawnProbe,
 };
 use scenario::Scenario;
 use spawn::{
@@ -121,9 +119,7 @@ pub fn run_app(template: Scenario) {
                 update_soi_central_body,
                 sync_editor_from_selection,
                 apply_editor_velocity,
-                execute_maneuver_burns,
                 orbital_physics,
-                advance_simulation_clock,
                 update_selection_visuals,
                 draw_orbit_trails,
                 draw_orbit_previews,

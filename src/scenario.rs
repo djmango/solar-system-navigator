@@ -166,8 +166,8 @@ mod tests {
 
     #[test]
     fn default_scenario_loads_and_has_circular_speeds() {
-        let scenario =
-            load_scenario_relative("scenarios/default.toml").expect("default scenario should parse");
+        let scenario = load_scenario_relative("scenarios/default.toml")
+            .expect("default scenario should parse");
         assert!(scenario.bodies.len() >= 5);
         validate_circular_speeds(&scenario).expect("inner system circular speeds");
     }

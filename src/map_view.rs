@@ -180,7 +180,11 @@ pub fn draw_orbit_previews(
         draw_world_path(&mut gizmos, &predicted, Color::srgba(1.0, 0.55, 0.15, 0.95));
 
         let step = planner.preview_step.max(TRUTH_INTEGRATION_DT * 0.25);
-        for node in &planner.nodes {
+        for node in planner
+            .nodes
+            .iter()
+            .filter(|node| !node.executed && node.time >= clock.time)
+        {
             let time_offset = (node.time - clock.time).max(0.0);
             if let Some(pos) = position_at_time(&predicted, time_offset, step) {
                 let marker = 5.0e8 + node.delta_v_magnitude() * 2.0e7;

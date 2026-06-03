@@ -304,8 +304,10 @@ pub fn update_hud_text(
                 .iter()
                 .enumerate()
                 .map(|(i, n)| {
+                    let vessel = n.target_body.as_deref().unwrap_or(target);
+                    let frame = n.central_body.as_deref().unwrap_or(central);
                     format!(
-                        "#{i} t={:.0}s Δv=({:.2},{:.2},{:.2}){}",
+                        "#{i} {vessel}/{frame} t={:.0}s Δv=({:.2},{:.2},{:.2}){}",
                         n.time,
                         n.prograde,
                         n.normal,

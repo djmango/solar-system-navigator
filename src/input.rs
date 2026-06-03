@@ -133,16 +133,7 @@ fn cycle_selection(
     if !keyboard.just_pressed(KeyCode::Tab) {
         return;
     }
-    let names: Vec<_> = bodies
-        .iter()
-        .filter_map(|(b, _)| {
-            if b.name.contains("Probe") {
-                None
-            } else {
-                Some(b.name.clone())
-            }
-        })
-        .collect();
+    let names: Vec<_> = bodies.iter().map(|(b, _)| b.name.clone()).collect();
     if names.is_empty() {
         return;
     }

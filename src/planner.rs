@@ -5,34 +5,38 @@ use bevy::prelude::*;
 use crate::components::{
     CelestialBody, FixedBody, Mass, Position, Probe, SoiRadius, TruthOrbit, Velocity,
 };
-use crate::maneuver::reset_maneuver_execution;
 use crate::orbit::RelativeState;
-use crate::resources::{
-    EditorState, ManeuverNode, RoutePlanner, SimulationClock, SimulationControl,
-};
+use crate::resources::{EditorState, ManeuverNode, RoutePlanner, SimulationClock};
 use crate::scenario::Scenario;
 use crate::soi::{self, SoiBodySnapshot};
 use crate::transfer::{self, HohmannTransfer};
-
-pub fn advance_simulation_clock(
-    time: Res<Time>,
-    control: Res<SimulationControl>,
-    mut clock: ResMut<SimulationClock>,
-) {
-    if control.paused && !control.step_once {
-        return;
-    }
-    let dt = time.delta_secs() * control.speed * control.ticks_per_frame.max(1) as f32;
-    clock.time += dt;
-}
 
 pub fn sync_route_planner_targets(
     editor: Res<EditorState>,
     mut planner: ResMut<RoutePlanner>,
     bodies: Query<(&CelestialBody, Option<&FixedBody>, Option<&Probe>)>,
 ) {
-    if let Some(name) = &editor.selected_name {
+    if let Some(name) = &editor.selected_name
+        && bodies
+            .iter()
+            .any(|(body, fixed, _)| &body.name == name && fixed.is_none())
+    {
         planner.target_body = Some(name.clone());
+    }
+
+    if let Some(first_probe) = bodies
+        .iter()
+        .find(|(_, _, probe)| probe.is_some())
+        .map(|(body, _, _)| body.name.clone())
+    {
+        let current_is_probe = planner.target_body.as_ref().is_some_and(|target| {
+            bodies
+                .iter()
+                .any(|(body, _, probe)| &body.name == target && probe.is_some())
+        });
+        if !current_is_probe {
+            planner.target_body = Some(first_probe);
+        }
     }
 
     if planner.central_body.is_none() {
@@ -107,13 +111,14 @@ pub fn compute_soi_radius_for_body(
 
 pub fn add_maneuver_node(planner: &mut RoutePlanner, clock: &SimulationClock) {
     let t = clock.time + planner.default_burn_offset;
-    planner.nodes.push(ManeuverNode {
-        time: t,
-        prograde: planner.draft_prograde,
-        normal: planner.draft_normal,
-        radial: planner.draft_radial,
-        executed: false,
-    });
+    planner.nodes.push(make_node(
+        t,
+        planner,
+        planner.draft_prograde,
+        planner.draft_normal,
+        planner.draft_radial,
+    ));
+    sort_nodes(planner);
     planner.show_previews = true;
 }
 
@@ -125,7 +130,7 @@ pub fn clear_maneuver_nodes(planner: &mut RoutePlanner) {
 
 pub fn on_simulation_reset(clock: &mut SimulationClock, planner: &mut RoutePlanner) {
     clock.time = 0.0;
-    reset_maneuver_execution(planner);
+    clear_maneuver_nodes(planner);
     planner.last_hohmann = None;
 }
 
@@ -160,21 +165,36 @@ pub fn add_hohmann_maneuver_pair(
 ) {
     let t0 = clock.time + planner.default_burn_offset;
     let t1 = t0 + xfer.transfer_time;
-    planner.nodes.push(ManeuverNode {
-        time: t0,
-        prograde: xfer.dv_departure,
-        normal: 0.0,
-        radial: 0.0,
-        executed: false,
-    });
-    planner.nodes.push(ManeuverNode {
-        time: t1,
-        prograde: xfer.dv_arrival,
-        normal: 0.0,
-        radial: 0.0,
-        executed: false,
-    });
+    planner
+        .nodes
+        .push(make_node(t0, planner, xfer.dv_departure, 0.0, 0.0));
+    planner
+        .nodes
+        .push(make_node(t1, planner, xfer.dv_arrival, 0.0, 0.0));
+    sort_nodes(planner);
     planner.show_previews = true;
+}
+
+fn make_node(
+    time: f32,
+    planner: &RoutePlanner,
+    prograde: f32,
+    normal: f32,
+    radial: f32,
+) -> ManeuverNode {
+    ManeuverNode {
+        time,
+        target_body: planner.target_body.clone(),
+        central_body: planner.central_body.clone(),
+        prograde,
+        normal,
+        radial,
+        executed: false,
+    }
+}
+
+fn sort_nodes(planner: &mut RoutePlanner) {
+    planner.nodes.sort_by(|a, b| a.time.total_cmp(&b.time));
 }
 
 pub fn build_soi_snapshots(

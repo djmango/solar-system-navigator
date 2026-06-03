@@ -82,7 +82,12 @@ impl Default for MapViewMode {
 
 #[derive(Debug, Clone)]
 pub struct ManeuverNode {
+    /// Universal simulation time for the impulsive burn [s].
     pub time: f32,
+    /// Vessel receiving the burn. Falls back to the current planner target for legacy nodes.
+    pub target_body: Option<String>,
+    /// Reference body used to build the TNW frame at burn time.
+    pub central_body: Option<String>,
     pub prograde: f32,
     pub normal: f32,
     pub radial: f32,
@@ -123,7 +128,7 @@ impl Default for RoutePlanner {
             draft_prograde: 500.0,
             draft_normal: 0.0,
             draft_radial: 0.0,
-            default_burn_offset: crate::astro::DAY,
+            default_burn_offset: 30.0,
             preview_horizon: crate::astro::YEAR,
             preview_step: 3600.0,
             show_previews: true,

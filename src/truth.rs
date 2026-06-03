@@ -20,6 +20,7 @@ pub const TRUTH_INTEGRATION_DT: f32 = 600.0;
 const MAX_INTEGRATION_STEPS: usize = 12_000;
 #[cfg(not(target_arch = "wasm32"))]
 const MAX_INTEGRATION_STEPS: usize = 25_000;
+const MANEUVER_TIME_EPS: f32 = 1.0e-3;
 
 /// One velocity Verlet substep — shared by gameplay physics and truth previews.
 pub fn velocity_verlet_step(
@@ -89,6 +90,108 @@ pub fn velocity_verlet_step(
             fixed: s.fixed,
         })
         .collect()
+}
+
+/// Advance N-body state over `dt`, splitting the step at maneuver node times.
+///
+/// Nodes are instantaneous burns at universal simulation time, applied in TNW
+/// from the state at burn time. Live physics and map previews both use this
+/// helper so execution and prediction stay in lockstep.
+pub fn advance_state_with_maneuvers(
+    state: &mut Vec<BodyState>,
+    nodes: &mut [ManeuverNode],
+    planner_central: Option<&str>,
+    planner_target: Option<&str>,
+    start_time: f32,
+    dt: f32,
+    g: f32,
+    softening: f32,
+) -> f32 {
+    if dt <= 0.0 {
+        return start_time;
+    }
+
+    let end_time = start_time + dt;
+    let mut t = start_time;
+
+    loop {
+        let Some(next_idx) = next_pending_node(nodes, t, end_time) else {
+            let remaining = end_time - t;
+            if remaining > MANEUVER_TIME_EPS {
+                *state = velocity_verlet_step(state, g, softening, remaining);
+            }
+            return end_time;
+        };
+
+        let burn_time = nodes[next_idx].time.clamp(t, end_time);
+        let coast_dt = burn_time - t;
+        if coast_dt > MANEUVER_TIME_EPS {
+            *state = velocity_verlet_step(state, g, softening, coast_dt);
+        }
+
+        let node = nodes[next_idx].clone();
+        let _applied = apply_tnw_burn(state, planner_central, planner_target, &node);
+        // Invalid legacy nodes are consumed too; otherwise the integrator would
+        // retry the same timestamp forever.
+        nodes[next_idx].executed = true;
+        t = burn_time;
+    }
+}
+
+fn next_pending_node(nodes: &[ManeuverNode], start_time: f32, end_time: f32) -> Option<usize> {
+    nodes
+        .iter()
+        .enumerate()
+        .filter(|(_, node)| !node.executed && node.time <= end_time + MANEUVER_TIME_EPS)
+        .min_by(|(_, a), (_, b)| {
+            let a_time = a.time.max(start_time);
+            let b_time = b.time.max(start_time);
+            a_time.total_cmp(&b_time)
+        })
+        .map(|(idx, _)| idx)
+}
+
+pub fn apply_tnw_burn(
+    states: &mut [BodyState],
+    planner_central: Option<&str>,
+    planner_target: Option<&str>,
+    node: &ManeuverNode,
+) -> bool {
+    let target_name = node
+        .target_body
+        .as_deref()
+        .or(planner_target)
+        .unwrap_or_default();
+    if target_name.is_empty() {
+        return false;
+    }
+
+    let central_name = node
+        .central_body
+        .as_deref()
+        .or(planner_central)
+        .unwrap_or_default();
+    if central_name.is_empty() || central_name == target_name {
+        return false;
+    }
+
+    let Some(central) = states.iter().find(|b| b.name == central_name) else {
+        return false;
+    };
+    let central_pos = central.position;
+    let central_vel = central.velocity;
+
+    let Some(target) = states.iter_mut().find(|b| b.name == target_name) else {
+        return false;
+    };
+    if target.fixed {
+        return false;
+    }
+
+    let rel = RelativeState::new(target.position - central_pos, target.velocity - central_vel);
+    let new_rel_vel = orbit::apply_tnw_delta_v(rel, node.prograde, node.normal, node.radial);
+    target.velocity = central_vel + new_rel_vel;
+    true
 }
 
 pub fn states_from_scenario(scenario: &Scenario) -> Vec<BodyState> {
@@ -213,7 +316,12 @@ pub fn predict_target_path_nbody(
 
     let steps = ((horizon / dt).ceil() as usize).clamp(1, MAX_INTEGRATION_STEPS);
     let mut t = sim_time;
-    let mut node_idx = 0;
+    let mut preview_nodes: Vec<ManeuverNode> = nodes
+        .iter()
+        .filter(|node| !node.executed && node.time >= sim_time - MANEUVER_TIME_EPS)
+        .cloned()
+        .collect();
+    preview_nodes.sort_by(|a, b| a.time.total_cmp(&b.time));
 
     if let Some(pos) = state
         .iter()
@@ -224,13 +332,16 @@ pub fn predict_target_path_nbody(
     }
 
     for _ in 0..steps {
-        while node_idx < nodes.len() && nodes[node_idx].time <= t + dt * 0.5 {
-            apply_tnw_burn(&mut state, central_name, target_name, &nodes[node_idx]);
-            node_idx += 1;
-        }
-
-        state = velocity_verlet_step(&state, g, softening, dt);
-        t += dt;
+        t = advance_state_with_maneuvers(
+            &mut state,
+            &mut preview_nodes,
+            Some(central_name),
+            Some(target_name),
+            t,
+            dt,
+            g,
+            softening,
+        );
 
         if let Some(pos) = state
             .iter()
@@ -244,31 +355,29 @@ pub fn predict_target_path_nbody(
     path
 }
 
-fn apply_tnw_burn(
-    states: &mut [BodyState],
-    central_name: &str,
-    target_name: &str,
-    node: &ManeuverNode,
-) {
-    let Some(central) = states.iter().find(|b| b.name == central_name) else {
-        return;
-    };
-    let central_pos = central.position;
-    let central_vel = central.velocity;
-
-    let Some(target) = states.iter_mut().find(|b| b.name == target_name) else {
-        return;
-    };
-
-    let rel = RelativeState::new(target.position - central_pos, target.velocity - central_vel);
-    let new_rel_vel = orbit::apply_tnw_delta_v(rel, node.prograde, node.normal, node.radial);
-    target.velocity = central_vel + new_rel_vel;
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::scenario::load_scenario_relative;
+
+    fn two_body_state() -> Vec<BodyState> {
+        vec![
+            BodyState {
+                name: "Sun".into(),
+                position: Vec3::ZERO,
+                velocity: Vec3::ZERO,
+                mass: 1e30,
+                fixed: true,
+            },
+            BodyState {
+                name: "Probe".into(),
+                position: Vec3::new(crate::astro::AU, 0.0, 0.0),
+                velocity: Vec3::new(0.0, 0.0, 29_780.0),
+                mass: 1.0,
+                fixed: false,
+            },
+        ]
+    }
 
     #[test]
     fn verlet_two_body_stays_bound() {
@@ -300,9 +409,64 @@ mod tests {
 
     #[test]
     fn default_scenario_truth_paths_have_samples() {
-        let scenario =
-            load_scenario_relative("scenarios/default.toml").expect("load");
+        let scenario = load_scenario_relative("scenarios/default.toml").expect("load");
         let paths = build_truth_paths_for_scenario(&scenario);
         assert!(paths.get("Earth").is_some_and(|p| p.len() >= 32));
+    }
+
+    #[test]
+    fn prograde_node_executes_inside_large_step() {
+        let mut state = two_body_state();
+        let mut nodes = vec![ManeuverNode {
+            time: 10.0,
+            target_body: Some("Probe".into()),
+            central_body: Some("Sun".into()),
+            prograde: 100.0,
+            normal: 0.0,
+            radial: 0.0,
+            executed: false,
+        }];
+
+        advance_state_with_maneuvers(
+            &mut state,
+            &mut nodes,
+            Some("Sun"),
+            Some("Probe"),
+            0.0,
+            1000.0,
+            crate::astro::G,
+            1.0e6,
+        );
+
+        assert!(nodes[0].executed);
+        let probe = state.iter().find(|s| s.name == "Probe").unwrap();
+        assert!(probe.velocity.length() > 29_800.0);
+    }
+
+    #[test]
+    fn future_node_waits_until_interval_contains_it() {
+        let mut state = two_body_state();
+        let mut nodes = vec![ManeuverNode {
+            time: 2000.0,
+            target_body: Some("Probe".into()),
+            central_body: Some("Sun".into()),
+            prograde: 100.0,
+            normal: 0.0,
+            radial: 0.0,
+            executed: false,
+        }];
+
+        advance_state_with_maneuvers(
+            &mut state,
+            &mut nodes,
+            Some("Sun"),
+            Some("Probe"),
+            0.0,
+            1000.0,
+            crate::astro::G,
+            1.0e6,
+        );
+
+        assert!(!nodes[0].executed);
     }
 }

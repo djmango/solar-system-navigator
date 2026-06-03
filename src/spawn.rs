@@ -10,9 +10,7 @@ use crate::resources::{
     ActiveScenario, BodyTextureCache, EditorState, HoveredBody, PendingTruthPaths,
     PhysicsConstants, RoutePlanner, SimulationClock, WorldAssets,
 };
-use crate::scenario::{
-    BodyDef, Scenario, load_scenario_relative, validate_circular_speeds,
-};
+use crate::scenario::{BodyDef, Scenario, load_scenario_relative, validate_circular_speeds};
 use crate::truth::{TRUTH_PATH_SAMPLES, build_truth_paths_for_scenario};
 
 const SELECTED_SCALE: f32 = 1.2;
@@ -476,7 +474,8 @@ pub fn spawn_probe(
     mut texture_cache: ResMut<BodyTextureCache>,
     world_assets: Res<WorldAssets>,
     active: Res<ActiveScenario>,
-    editor: Res<EditorState>,
+    mut editor: ResMut<EditorState>,
+    mut planner: ResMut<RoutePlanner>,
     bodies: Query<(&CelestialBody, &Position, &Velocity)>,
     existing_probes: Query<&CelestialBody, With<Probe>>,
 ) {
@@ -486,7 +485,8 @@ pub fn spawn_probe(
     let Some(anchor_name) = &editor.selected_name else {
         return;
     };
-    if existing_probes.iter().count() >= 8 {
+    let probe_count = existing_probes.iter().count();
+    if probe_count >= 8 {
         warn!("Probe limit reached (8)");
         return;
     }
@@ -496,8 +496,9 @@ pub fn spawn_probe(
         return;
     };
 
+    let probe_name = format!("{} Probe {}", anchor.name, probe_count + 1);
     let probe_def = BodyDef {
-        name: format!("{} Probe", anchor.name),
+        name: probe_name.clone(),
         mass: 0.01,
         position: position.0.to_array(),
         velocity: (velocity.0 + Vec3::new(editor.probe_delta_v, 0.0, 0.0)).to_array(),
@@ -527,4 +528,9 @@ pub fn spawn_probe(
         soi,
         active.template.visual_exaggeration,
     );
+    editor.selected_name = Some(probe_name.clone());
+    editor.selection_changed = true;
+    editor.follow_selection = true;
+    planner.target_body = Some(probe_name);
+    planner.show_previews = true;
 }
