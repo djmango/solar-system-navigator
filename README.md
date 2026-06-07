@@ -144,4 +144,4 @@ The legacy Bevy desktop app remains in `crates/navigator-legacy/` for local use 
 
 ## License
 
-Licensed under the [Apache License 2.0](LICENSE).
+Licensed under the [MIT License](LICENSE).
