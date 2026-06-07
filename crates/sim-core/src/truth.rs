@@ -10,6 +10,8 @@ use crate::scenario::Scenario;
 pub const TRUTH_PATH_SAMPLES: usize = 256;
 pub const TRUTH_INTEGRATION_DT: f64 = 600.0;
 const MAX_INTEGRATION_STEPS: usize = 12_000;
+/// Burn-time tolerance [s] for splitting an integration step at a node.
+const MANEUVER_TIME_EPS: f64 = 1.0e-3;
 
 pub fn velocity_verlet_step(
     states: &[BodyState],
@@ -195,7 +197,14 @@ pub fn predict_target_path_nbody(
 
     let steps = ((horizon / dt).ceil() as usize).clamp(1, MAX_INTEGRATION_STEPS);
     let mut t = sim_time;
-    let mut node_idx = 0;
+
+    // Preview must not mutate the caller's nodes; clone the still-pending ones.
+    let mut preview_nodes: Vec<ManeuverNode> = nodes
+        .iter()
+        .filter(|n| !n.executed && n.time >= sim_time - MANEUVER_TIME_EPS)
+        .cloned()
+        .collect();
+    preview_nodes.sort_by(|a, b| a.time.total_cmp(&b.time));
 
     if let Some(pos) = state
         .iter()
@@ -206,13 +215,16 @@ pub fn predict_target_path_nbody(
     }
 
     for _ in 0..steps {
-        while node_idx < nodes.len() && nodes[node_idx].time <= t + dt * 0.5 {
-            apply_tnw_burn(&mut state, central_name, target_name, &nodes[node_idx]);
-            node_idx += 1;
-        }
-
-        state = velocity_verlet_step(&state, g, softening, dt);
-        t += dt;
+        t = advance_state_with_maneuvers(
+            &mut state,
+            &mut preview_nodes,
+            central_name,
+            target_name,
+            t,
+            dt,
+            g,
+            softening,
+        );
 
         if let Some(pos) = state
             .iter()
@@ -224,6 +236,61 @@ pub fn predict_target_path_nbody(
     }
 
     path
+}
+
+/// Advance the N-body state over `dt`, splitting the step exactly at any
+/// maneuver-node times that fall inside the interval.
+///
+/// This is the single authoritative burn path shared by the live simulation
+/// and the map preview: nodes are instantaneous burns at universal sim time,
+/// applied in TNW from the state at the burn instant, so execution and
+/// prediction stay in lockstep even under large time-warp steps. Nodes that
+/// fire are flagged `executed`.
+#[allow(clippy::too_many_arguments)]
+pub fn advance_state_with_maneuvers(
+    state: &mut Vec<BodyState>,
+    nodes: &mut [ManeuverNode],
+    central_name: &str,
+    target_name: &str,
+    start_time: f64,
+    dt: f64,
+    g: f64,
+    softening: f64,
+) -> f64 {
+    if dt <= 0.0 {
+        return start_time;
+    }
+
+    let end_time = start_time + dt;
+    let mut t = start_time;
+
+    loop {
+        let Some(idx) = next_pending_node(nodes, t, end_time) else {
+            let remaining = end_time - t;
+            if remaining > MANEUVER_TIME_EPS {
+                *state = velocity_verlet_step(state, g, softening, remaining);
+            }
+            return end_time;
+        };
+
+        let burn_time = nodes[idx].time.clamp(t, end_time);
+        let coast = burn_time - t;
+        if coast > MANEUVER_TIME_EPS {
+            *state = velocity_verlet_step(state, g, softening, coast);
+        }
+        apply_tnw_burn(state, central_name, target_name, &nodes[idx]);
+        nodes[idx].executed = true;
+        t = burn_time;
+    }
+}
+
+fn next_pending_node(nodes: &[ManeuverNode], start_time: f64, end_time: f64) -> Option<usize> {
+    nodes
+        .iter()
+        .enumerate()
+        .filter(|(_, n)| !n.executed && n.time <= end_time + MANEUVER_TIME_EPS)
+        .min_by(|(_, a), (_, b)| a.time.max(start_time).total_cmp(&b.time.max(start_time)))
+        .map(|(i, _)| i)
 }
 
 fn apply_tnw_burn(
@@ -241,6 +308,9 @@ fn apply_tnw_burn(
     let Some(target) = states.iter_mut().find(|b| b.name == target_name) else {
         return;
     };
+    if target.fixed {
+        return;
+    }
 
     let rel = RelativeState::new(target.position - central_pos, target.velocity - central_vel);
     let new_rel_vel = orbit::apply_tnw_delta_v(rel, node.prograde, node.normal, node.radial);
@@ -287,5 +357,150 @@ mod tests {
         let scenario = load_scenario_from_str(DEFAULT_SCENARIO).expect("load");
         let paths = build_truth_paths_for_scenario(&scenario);
         assert!(paths.get("Earth").is_some_and(|p| p.len() >= 32));
+    }
+
+    fn sun_probe() -> Vec<BodyState> {
+        vec![
+            BodyState {
+                name: "Sun".into(),
+                position: DVec3::ZERO,
+                velocity: DVec3::ZERO,
+                mass: 1.0e30,
+                fixed: true,
+            },
+            BodyState {
+                name: "Probe".into(),
+                position: DVec3::new(astro::AU, 0.0, 0.0),
+                velocity: DVec3::new(0.0, 0.0, 29_780.0),
+                mass: 1.0,
+                fixed: false,
+            },
+        ]
+    }
+
+    #[test]
+    fn burn_executes_at_node_time_inside_large_step() {
+        // A single huge step that straddles the node time must still fire the
+        // burn (this is the time-warp case the old per-substep check missed).
+        let mut state = sun_probe();
+        let mut nodes = vec![ManeuverNode {
+            time: 5_000.0,
+            prograde: 1_000.0,
+            normal: 0.0,
+            radial: 0.0,
+            executed: false,
+        }];
+        let v0 = state
+            .iter()
+            .find(|s| s.name == "Probe")
+            .unwrap()
+            .velocity
+            .length();
+
+        advance_state_with_maneuvers(
+            &mut state,
+            &mut nodes,
+            "Sun",
+            "Probe",
+            0.0,
+            50_000.0,
+            astro::G,
+            1.0e6,
+        );
+
+        assert!(nodes[0].executed, "node should have fired inside the step");
+        let v1 = state
+            .iter()
+            .find(|s| s.name == "Probe")
+            .unwrap()
+            .velocity
+            .length();
+        assert!(
+            v1 > v0 + 500.0,
+            "prograde burn should raise speed: {v0} -> {v1}"
+        );
+    }
+
+    #[test]
+    fn future_node_is_not_executed_early() {
+        let mut state = sun_probe();
+        let mut nodes = vec![ManeuverNode {
+            time: 1.0e6,
+            prograde: 1_000.0,
+            normal: 0.0,
+            radial: 0.0,
+            executed: false,
+        }];
+        advance_state_with_maneuvers(
+            &mut state,
+            &mut nodes,
+            "Sun",
+            "Probe",
+            0.0,
+            1_000.0,
+            astro::G,
+            1.0e6,
+        );
+        assert!(!nodes[0].executed);
+    }
+
+    #[test]
+    fn live_and_preview_agree_after_burn() {
+        // Stepping the live integrator across a node must land on the same point
+        // the map preview predicts for that time — the property that keeps the
+        // amber path honest.
+        let nodes = vec![ManeuverNode {
+            time: 30_000.0,
+            prograde: 800.0,
+            normal: 120.0,
+            radial: -60.0,
+            executed: false,
+        }];
+        let dt = 600.0;
+        let horizon = 120_000.0;
+
+        // Preview: dense fixed-step integration with the (immutable) node list.
+        let preview = predict_target_path_nbody(
+            &sun_probe(),
+            "Sun",
+            "Probe",
+            &nodes,
+            0.0,
+            horizon,
+            dt,
+            astro::G,
+            1.0e6,
+        );
+
+        // Live: same dt cadence, mutating a working copy of the nodes.
+        let mut live_state = sun_probe();
+        let mut live_nodes = nodes.clone();
+        let mut t = 0.0;
+        let steps = (horizon / dt) as usize;
+        for _ in 0..steps {
+            t = advance_state_with_maneuvers(
+                &mut live_state,
+                &mut live_nodes,
+                "Sun",
+                "Probe",
+                t,
+                dt,
+                astro::G,
+                1.0e6,
+            );
+        }
+
+        let live_pos = live_state
+            .iter()
+            .find(|s| s.name == "Probe")
+            .unwrap()
+            .position;
+        let preview_pos = *preview.last().unwrap();
+        let err = (live_pos - preview_pos).length();
+        let scale = live_pos.length().max(1.0);
+        assert!(
+            err / scale < 1.0e-6,
+            "live vs preview divergence {err} m (scale {scale})"
+        );
     }
 }
