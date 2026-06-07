@@ -73,7 +73,7 @@ export function SolarScene() {
           ref={controlsRef}
           makeDefault
           enablePan
-          minDistance={0.02}
+          minDistance={0.0008}
           maxDistance={400}
           rotateSpeed={0.55}
           zoomSpeed={1.25}

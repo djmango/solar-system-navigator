@@ -5,9 +5,11 @@ export type SimCommand =
   | { cmd: "clear_nodes" }
   | { cmd: "update_node"; index: number; prograde: number; normal: number; radial: number }
   | { cmd: "remove_node"; index: number }
+  | { cmd: "set_node_time"; index: number; time: number }
   | { cmd: "set_draft_dv"; prograde: number; normal: number; radial: number }
   | { cmd: "reset" }
   | { cmd: "step_once" }
   | { cmd: "compute_hohmann" }
   | { cmd: "apply_hohmann_departure" }
-  | { cmd: "add_hohmann_pair" };
+  | { cmd: "add_hohmann_pair" }
+  | { cmd: "warp_to_node"; index: number; lead?: number };

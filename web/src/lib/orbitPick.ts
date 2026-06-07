@@ -48,15 +48,18 @@ export function axisDragDelta(
   deltaX: number,
   deltaY: number,
   camera: THREE.Camera,
-  sensitivity = 1.8,
+  sensitivity = 1.0,
 ): number {
   const origin = originScene.clone().project(camera);
   const tip = originScene.clone().add(axisWorldUnit).project(camera);
   const axisScreen = new THREE.Vector2(tip.x - origin.x, tip.y - origin.y);
-  if (axisScreen.lengthSq() < 1e-8) return -deltaY * sensitivity;
+  if (axisScreen.lengthSq() < 1e-8) return -deltaY * sensitivity * 12;
   axisScreen.normalize();
   const mouse = new THREE.Vector2(deltaX, -deltaY);
-  return mouse.dot(axisScreen) * sensitivity * 50;
+  // Scale with camera distance so drag feel is consistent across zoom levels.
+  const dist = camera.position.distanceTo(originScene);
+  const zoomFactor = Math.min(Math.max(dist * 0.35, 0.04), 2.5);
+  return mouse.dot(axisScreen) * sensitivity * 14 * zoomFactor;
 }
 
 export function timedFlatToScenePoints(flat: number[]): THREE.Vector3[] {

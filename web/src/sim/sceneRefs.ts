@@ -13,12 +13,16 @@ export interface OrbitPathCacheEntry {
   name: string;
   flat: number[];
   key: string;
+  /** >1 when an intra-SOI orbit is exaggerated for display. */
+  displayScale: number;
 }
 
 /** Scene geometry caches — filled only from the WASM access layer, never during React render. */
 export const orbitPathsCacheRef: { current: OrbitPathCacheEntry[] } = { current: [] };
 export const maneuverPreviewFlatRef: { current: number[] } = { current: [] };
 export const maneuverMarkersFlatRef: { current: number[] } = { current: [] };
+/** Display exaggeration for the active vessel's intra-SOI orbit (1 = none). */
+export const vesselDisplayScaleRef: { current: number } = { current: 1 };
 
 export function bumpSceneCacheEpoch() {
   useSimStore.getState().bumpSceneCacheEpoch();

@@ -7,7 +7,9 @@
     "dev": "npm run build:wasm && vite",
     "build": "npm run build:wasm && vite build",
     "typecheck": "tsc --noEmit",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "validate": "node harness.mjs",
+    "validate:node": "node harness-node.mjs"
   },
   "dependencies": {
     "@radix-ui/react-separator": "^1.1.8",
@@ -30,6 +32,7 @@
     "@types/react-dom": "^19.1.2",
     "@types/three": "^0.175.0",
     "@vitejs/plugin-react": "^4.4.1",
+    "playwright": "^1.60.0",
     "tailwindcss": "^4.1.4",
     "typescript": "^5.8.3",
     "vite": "^6.3.3",

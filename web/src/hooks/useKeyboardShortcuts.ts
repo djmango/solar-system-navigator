@@ -94,13 +94,28 @@ export function useKeyboardShortcuts() {
           simDispatch({ cmd: "reset" });
           resetSimUiAfterReset();
           break;
+        case "KeyW":
+          if (store.selectedNodeIndex === null) {
+            store.setActionNotice("Select a maneuver node to warp to it.");
+            break;
+          }
+          simDispatch(
+            { cmd: "warp_to_node", index: store.selectedNodeIndex, lead: 30 },
+            { notice: "Warped to maneuver node" },
+          );
+          break;
         case "KeyH":
           if (!hasManeuverVessel(store)) {
             store.setActionNotice("Select a vessel in View for Hohmann planning.");
             break;
           }
           if (e.shiftKey) {
-            simDispatch([{ cmd: "compute_hohmann" }, { cmd: "add_hohmann_pair" }]);
+            simDispatch([{ cmd: "compute_hohmann" }, { cmd: "add_hohmann_pair" }], {
+              onComplete: () => {
+                const n = useSimStore.getState().planner?.nodes.length ?? 0;
+                if (n >= 2) store.setSelectedNodeIndex(n - 2);
+              },
+            });
           } else {
             simDispatch([{ cmd: "compute_hohmann" }, { cmd: "apply_hohmann_departure" }]);
           }

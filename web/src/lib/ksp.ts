@@ -53,6 +53,7 @@ export const KSP_SHORTCUTS = [
   { keys: "F", action: "Frame selected body" },
   { keys: "B", action: "Add maneuver node" },
   { keys: "C", action: "Clear maneuver nodes" },
+  { keys: "W", action: "Warp to selected maneuver node" },
   { keys: "H", action: "Hohmann Δv draft (Shift+H = add pair)" },
   { keys: "V", action: "Toggle orbit paths" },
   { keys: "N", action: "Single physics step" },

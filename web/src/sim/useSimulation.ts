@@ -38,9 +38,11 @@ export interface SyncPacket {
   bodies: BodySnapshot[];
   diagnostics: import("../lib/units").SimDiagnostics;
   planner: import("../lib/units").PlannerState;
-  orbit_paths: { name: string; flat: number[] }[];
+  target_period?: number;
+  orbit_paths: { name: string; flat: number[]; display_scale?: number }[];
   maneuver_preview: number[];
   maneuver_markers: number[];
+  vessel_display_scale?: number;
   error?: string;
 }
 
@@ -100,6 +102,7 @@ function applyHudFromPacket(packet: SyncPacket) {
   store.setBodies(packet.bodies);
   store.setDiagnostics(packet.diagnostics);
   store.setPlanner(packet.planner);
+  store.setTargetPeriod(packet.target_period ?? 0);
   store.setLastHohmann(packet.planner.last_hohmann ?? null);
 }
 
@@ -121,9 +124,11 @@ function applySyncPacket(packet: SyncPacket, mode: SimSyncMode) {
       orbit_paths: packet.orbit_paths ?? [],
       maneuver_preview: packet.maneuver_preview ?? [],
       maneuver_markers: packet.maneuver_markers ?? [],
+      vessel_display_scale: packet.vessel_display_scale,
     });
   } else if (mode === "planner") {
     if (packet.planner) useSimStore.getState().setPlanner(packet.planner);
+    useSimStore.getState().setTargetPeriod(packet.target_period ?? 0);
     applyManeuverLayers(packet.maneuver_preview ?? [], packet.maneuver_markers ?? []);
   }
 }
@@ -190,6 +195,7 @@ function runDriveFrame(sim: WasmSimulation, dt: number, now: number) {
       packet.orbit_paths ?? [],
       packet.maneuver_markers ?? [],
       wantPreview ? (packet.maneuver_preview ?? []) : undefined,
+      packet.vessel_display_scale,
     );
   }
 }

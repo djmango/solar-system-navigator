@@ -6,8 +6,12 @@ import { defineConfig, type Plugin } from "vite";
 import topLevelAwait from "vite-plugin-top-level-await";
 import wasm from "vite-plugin-wasm";
 
+// Serve the repo `assets/` folder at `/assets` in dev, AND copy it into the
+// build output so the deployed site has textures/scenarios without relying on a
+// separate shell step. Keeps dev and production behavior identical.
 function serveRepoAssets(): Plugin {
   const assetsRoot = path.resolve(__dirname, "../assets");
+  const distAssets = path.resolve(__dirname, "../dist/assets");
   return {
     name: "serve-repo-assets",
     configureServer(server) {
@@ -27,6 +31,14 @@ function serveRepoAssets(): Plugin {
         res.setHeader("Content-Type", types[ext] ?? "application/octet-stream");
         fs.createReadStream(filePath).pipe(res);
       });
+    },
+    closeBundle() {
+      if (!fs.existsSync(assetsRoot)) return;
+      for (const sub of ["textures", "scenarios", "missions"]) {
+        const src = path.join(assetsRoot, sub);
+        if (!fs.existsSync(src)) continue;
+        fs.cpSync(src, path.join(distAssets, sub), { recursive: true });
+      }
     },
   };
 }

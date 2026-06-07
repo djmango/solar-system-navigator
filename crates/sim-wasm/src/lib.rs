@@ -55,6 +55,10 @@ enum SimCommand {
     RemoveNode {
         index: u32,
     },
+    SetNodeTime {
+        index: u32,
+        time: f64,
+    },
     SetDraftDv {
         prograde: f64,
         normal: f64,
@@ -65,12 +69,23 @@ enum SimCommand {
     ComputeHohmann,
     ApplyHohmannDeparture,
     AddHohmannPair,
+    WarpToNode {
+        index: u32,
+        lead: f64,
+    },
 }
 
 #[derive(Serialize)]
 struct OrbitPathEntry {
     name: String,
     flat: Vec<f64>,
+    /// >1 when an intra-SOI orbit is exaggerated for display (LEO / lunar).
+    #[serde(skip_serializing_if = "is_one")]
+    display_scale: f64,
+}
+
+fn is_one(v: &f64) -> bool {
+    (*v - 1.0).abs() < 1e-9
 }
 
 #[derive(Serialize)]
@@ -80,9 +95,14 @@ struct SyncPacket {
     bodies: Vec<BodySnapshot>,
     diagnostics: SimDiagnostics,
     planner: RoutePlannerState,
+    /// Orbital period of the active vessel about its central body [s], for the
+    /// node-time slider scale. 0 when unknown.
+    target_period: f64,
     orbit_paths: Vec<OrbitPathEntry>,
     maneuver_preview: Vec<f64>,
     maneuver_markers: Vec<f64>,
+    /// Display exaggeration for the active vessel's intra-SOI orbit (1 = none).
+    vessel_display_scale: f64,
     error: Option<String>,
 }
 
@@ -107,21 +127,39 @@ impl WasmSimulation {
         if !show_orbits {
             return Vec::new();
         }
+        let vessel = sim.planner.target_body.clone();
+        let (vessel_flat, vessel_scale) = vessel
+            .as_ref()
+            .map(|_| sim.vessel_orbit_display_flat(128))
+            .unwrap_or((Vec::new(), 1.0));
+
         sim.body_snapshots()
             .into_iter()
             .map(|body| {
-                let flat = sim.truth_path_flat(&body.name);
-                let data = if flat.len() >= 6 {
-                    flat
-                } else {
-                    sim.orbit_preview_flat(&body.name, 96)
-                };
+                let (data, display_scale) =
+                    if vessel.as_deref() == Some(body.name.as_str()) && vessel_flat.len() >= 6 {
+                        (vessel_flat.clone(), vessel_scale)
+                    } else {
+                        let flat = sim.truth_path_flat(&body.name);
+                        let data = if flat.len() >= 6 {
+                            flat
+                        } else {
+                            sim.orbit_preview_flat(&body.name, 96)
+                        };
+                        (data, 1.0)
+                    };
                 OrbitPathEntry {
                     name: body.name,
                     flat: data,
+                    display_scale,
                 }
             })
             .collect()
+    }
+
+    fn vessel_display_scale(sim: &Simulation) -> f64 {
+        let (_, scale) = sim.vessel_orbit_display_flat(8);
+        scale
     }
 
     fn maneuver_preview_for(sim: &Simulation) -> Vec<f64> {
@@ -173,9 +211,11 @@ impl WasmSimulation {
             bodies: sim.body_snapshots(),
             diagnostics: sim.diagnostics.clone(),
             planner: sim.planner.clone(),
+            target_period: sim.target_orbital_period().unwrap_or(0.0),
             orbit_paths,
             maneuver_preview,
             maneuver_markers,
+            vessel_display_scale: Self::vessel_display_scale(sim),
             error: None,
         }
     }
@@ -187,6 +227,8 @@ impl WasmSimulation {
                 Ok(())
             }
             SimCommand::AddNodeAtWorld { x, y, z } => {
+                let scale = Self::vessel_display_scale(sim);
+                let (x, y, z) = sim.unscale_intra_soi_click(x, y, z, scale);
                 sim.add_maneuver_node_at_world_position(x, y, z).map(|_| ())
             }
             SimCommand::ClearNodes => {
@@ -200,6 +242,9 @@ impl WasmSimulation {
                 radial,
             } => sim.update_maneuver_node(index as usize, prograde, normal, radial),
             SimCommand::RemoveNode { index } => sim.remove_maneuver_node(index as usize),
+            SimCommand::SetNodeTime { index, time } => {
+                sim.set_maneuver_node_time(index as usize, time)
+            }
             SimCommand::SetDraftDv {
                 prograde,
                 normal,
@@ -219,13 +264,10 @@ impl WasmSimulation {
                 sim.step(1.0 / 60.0);
                 Ok(())
             }
-            SimCommand::ComputeHohmann => match sim.compute_hohmann() {
-                Some(xfer) => {
-                    sim.planner.last_hohmann = Some(xfer);
-                    Ok(())
-                }
-                None => Err("Could not compute Hohmann transfer".into()),
-            },
+            SimCommand::ComputeHohmann => sim.compute_hohmann().map(|_| ()),
+            SimCommand::WarpToNode { index, lead } => {
+                sim.warp_to_node(index as usize, lead).map(|_| ())
+            }
             SimCommand::ApplyHohmannDeparture => {
                 let xfer: HohmannTransfer = sim
                     .planner
@@ -319,6 +361,11 @@ impl WasmSimulation {
         if real_dt > 0.0 && real_dt < 0.5 && !ui.paused {
             sim.step(real_dt);
         }
+        // Keep the SOI central body and diagnostics current even while paused,
+        // so the burn frame, orbital period, camera framing, and energy readout
+        // reflect the vessel's actual state rather than the scenario primary.
+        sim.update_soi_central();
+        sim.refresh_diagnostics();
         Self::to_json(Self::sync_packet(
             &sim,
             ui.show_orbits,
@@ -351,9 +398,11 @@ impl WasmSimulation {
                         body_count: 0,
                     },
                     planner: RoutePlannerState::default(),
+                    target_period: 0.0,
                     orbit_paths: Vec::new(),
                     maneuver_preview: Vec::new(),
                     maneuver_markers: Vec::new(),
+                    vessel_display_scale: 1.0,
                     error: Some(format!("bad commands json: {err}")),
                 });
             }
@@ -371,6 +420,7 @@ impl WasmSimulation {
                 });
             }
         }
+        sim.update_soi_central();
         Self::to_json(Self::sync_packet(&sim, ui.show_orbits, true, true))
     }
 }

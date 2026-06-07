@@ -8,7 +8,8 @@ import { flatKey } from "@/lib/flatPath";
 import { METERS_PER_UNIT, toScene } from "@/lib/units";
 
 interface OrbitLineProps {
-  flat: number[];
+  flat?: number[];
+  points?: THREE.Vector3[];
   color: string;
   opacity?: number;
   pickable?: boolean;
@@ -25,12 +26,16 @@ function flatToPoints(flat: number[]): THREE.Vector3[] {
 
 export function OrbitLine({
   flat,
+  points: pointsProp,
   color,
   opacity = 0.5,
   pickable = false,
   pickRadius = 0.028,
 }: OrbitLineProps) {
-  const points = useMemo(() => flatToPoints(flat), [flatKey(flat)]);
+  const points = useMemo(
+    () => pointsProp ?? flatToPoints(flat ?? []),
+    [pointsProp, flat ? flatKey(flat) : ""],
+  );
   const linePoints = useMemo(
     () => points.map((p) => [p.x, p.y, p.z] as [number, number, number]),
     [points],

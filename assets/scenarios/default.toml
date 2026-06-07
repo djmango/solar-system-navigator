@@ -53,14 +53,29 @@ emissive = 0.6
 atmosphere = [0.35, 0.55, 0.95]
 texture = "textures/earth.jpg"
 
+# Heliocentric scout craft on a circular orbit at 1.15 AU (between Earth and
+# Mars) so its orbit is visible and clickable for transfer planning.
 [[bodies]]
 name = "Scout"
 mass = 1200.0
-position = [1.495978707e11, 8.0e6, 0.0]
-velocity = [0.0, 0.0, 29820.0]
+position = [1.720375513e11, 0.0, 0.0]
+velocity = [0.0, 0.0, 27774.0]
 radius = 50.0
-visual_radius = 8.0e8
+visual_radius = 1.2e9
 color = [0.92, 0.96, 1.0]
+emissive = 0.85
+probe = true
+
+# LEO scout for intra-SOI planning demos. Its orbit is exaggerated in the web
+# view when it is smaller than the parent planet's display radius.
+[[bodies]]
+name = "Scout-LEO"
+mass = 1200.0
+position = [1.495978707e11, 6.771e6, 0.0]
+velocity = [0.0, 0.0, 37444.0]
+radius = 50.0
+visual_radius = 1.2e9
+color = [0.75, 0.9, 1.0]
 emissive = 0.85
 probe = true
 
