@@ -38,6 +38,7 @@ export interface SyncPacket {
   bodies: BodySnapshot[];
   diagnostics: import("../lib/units").SimDiagnostics;
   planner: import("../lib/units").PlannerState;
+  target_period?: number;
   orbit_paths: { name: string; flat: number[] }[];
   maneuver_preview: number[];
   maneuver_markers: number[];
@@ -100,6 +101,7 @@ function applyHudFromPacket(packet: SyncPacket) {
   store.setBodies(packet.bodies);
   store.setDiagnostics(packet.diagnostics);
   store.setPlanner(packet.planner);
+  store.setTargetPeriod(packet.target_period ?? 0);
   store.setLastHohmann(packet.planner.last_hohmann ?? null);
 }
 
@@ -124,6 +126,7 @@ function applySyncPacket(packet: SyncPacket, mode: SimSyncMode) {
     });
   } else if (mode === "planner") {
     if (packet.planner) useSimStore.getState().setPlanner(packet.planner);
+    useSimStore.getState().setTargetPeriod(packet.target_period ?? 0);
     applyManeuverLayers(packet.maneuver_preview ?? [], packet.maneuver_markers ?? []);
   }
 }

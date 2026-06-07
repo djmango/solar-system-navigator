@@ -28,6 +28,8 @@ export interface SimStore {
   showShortcuts: boolean;
   diagnostics: SimDiagnostics | null;
   planner: PlannerState | null;
+  /** Orbital period of the active vessel about its central body [s] (0 = unknown). */
+  targetPeriod: number;
   lastHohmann: HohmannTransfer | null;
   actionNotice: string | null;
   sceneFault: string | null;
@@ -51,6 +53,7 @@ export interface SimStore {
   setShowShortcuts: (show: boolean) => void;
   setDiagnostics: (d: SimDiagnostics) => void;
   setPlanner: (p: PlannerState) => void;
+  setTargetPeriod: (period: number) => void;
   setLastHohmann: (h: HohmannTransfer | null) => void;
   setActionNotice: (message: string | null) => void;
   setSceneFault: (message: string | null) => void;
@@ -82,6 +85,7 @@ export const useSimStore = create<SimStore>((set, get) => ({
   showShortcuts: false,
   diagnostics: null,
   planner: null,
+  targetPeriod: 0,
   lastHohmann: null,
   actionNotice: null,
   sceneFault: null,
@@ -104,6 +108,7 @@ export const useSimStore = create<SimStore>((set, get) => ({
   setShowShortcuts: (showShortcuts) => set({ showShortcuts }),
   setDiagnostics: (diagnostics) => set({ diagnostics }),
   setPlanner: (planner) => set({ planner }),
+  setTargetPeriod: (targetPeriod) => set({ targetPeriod }),
   setLastHohmann: (lastHohmann) => set({ lastHohmann }),
   setActionNotice: (actionNotice) => set({ actionNotice }),
   setSceneFault: (sceneFault) => set({ sceneFault }),

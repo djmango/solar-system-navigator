@@ -416,7 +416,7 @@ impl Simulation {
         out
     }
 
-    fn target_orbital_period(&self) -> Option<f64> {
+    pub fn target_orbital_period(&self) -> Option<f64> {
         let central_name = self.planner.central_body.clone()?;
         let target_name = self.planner.target_body.clone()?;
         let central = self.states.iter().find(|s| s.name == central_name)?;
@@ -530,6 +530,23 @@ impl Simulation {
         if self.planner.nodes.is_empty() {
             self.planner.show_previews = false;
         }
+        Ok(())
+    }
+
+    /// Move a node's burn time (KSP "slide along the orbit"). Clamped to the
+    /// future so a node can't be scheduled in the past.
+    pub fn set_maneuver_node_time(&mut self, index: usize, time: f64) -> Result<(), String> {
+        let sim_time = self.sim_time;
+        let node = self
+            .planner
+            .nodes
+            .get_mut(index)
+            .ok_or_else(|| format!("maneuver node {index} not found"))?;
+        if node.executed {
+            return Err("cannot edit executed maneuver node".into());
+        }
+        node.time = time.max(sim_time + 1.0);
+        self.planner.show_previews = true;
         Ok(())
     }
 
@@ -704,6 +721,18 @@ mod tests {
         let sim = Simulation::from_default_scenario().expect("load");
         let buf = sim.state_buffer();
         assert_eq!(buf.len(), 2 + sim.states.len() * 6);
+    }
+
+    #[test]
+    fn set_node_time_clamps_to_future_and_moves_node() {
+        let mut sim = Simulation::from_default_scenario().expect("load");
+        sim.add_maneuver_node_at_time(sim.sim_time + 1000.0);
+        // Move it far ahead.
+        sim.set_maneuver_node_time(0, sim.sim_time + 5.0e6).expect("set");
+        assert!((sim.planner.nodes[0].time - (sim.sim_time + 5.0e6)).abs() < 1.0);
+        // A past time is clamped into the future.
+        sim.set_maneuver_node_time(0, sim.sim_time - 100.0).expect("set");
+        assert!(sim.planner.nodes[0].time > sim.sim_time);
     }
 
     #[test]

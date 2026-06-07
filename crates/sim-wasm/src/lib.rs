@@ -55,6 +55,10 @@ enum SimCommand {
     RemoveNode {
         index: u32,
     },
+    SetNodeTime {
+        index: u32,
+        time: f64,
+    },
     SetDraftDv {
         prograde: f64,
         normal: f64,
@@ -80,6 +84,9 @@ struct SyncPacket {
     bodies: Vec<BodySnapshot>,
     diagnostics: SimDiagnostics,
     planner: RoutePlannerState,
+    /// Orbital period of the active vessel about its central body [s], for the
+    /// node-time slider scale. 0 when unknown.
+    target_period: f64,
     orbit_paths: Vec<OrbitPathEntry>,
     maneuver_preview: Vec<f64>,
     maneuver_markers: Vec<f64>,
@@ -173,6 +180,7 @@ impl WasmSimulation {
             bodies: sim.body_snapshots(),
             diagnostics: sim.diagnostics.clone(),
             planner: sim.planner.clone(),
+            target_period: sim.target_orbital_period().unwrap_or(0.0),
             orbit_paths,
             maneuver_preview,
             maneuver_markers,
@@ -200,6 +208,9 @@ impl WasmSimulation {
                 radial,
             } => sim.update_maneuver_node(index as usize, prograde, normal, radial),
             SimCommand::RemoveNode { index } => sim.remove_maneuver_node(index as usize),
+            SimCommand::SetNodeTime { index, time } => {
+                sim.set_maneuver_node_time(index as usize, time)
+            }
             SimCommand::SetDraftDv {
                 prograde,
                 normal,
@@ -319,6 +330,10 @@ impl WasmSimulation {
         if real_dt > 0.0 && real_dt < 0.5 && !ui.paused {
             sim.step(real_dt);
         }
+        // Keep the SOI central body current even while paused, so the burn
+        // frame, orbital period, and camera framing reflect the vessel's actual
+        // sphere of influence rather than the scenario primary.
+        sim.update_soi_central();
         Self::to_json(Self::sync_packet(
             &sim,
             ui.show_orbits,
@@ -351,6 +366,7 @@ impl WasmSimulation {
                         body_count: 0,
                     },
                     planner: RoutePlannerState::default(),
+                    target_period: 0.0,
                     orbit_paths: Vec::new(),
                     maneuver_preview: Vec::new(),
                     maneuver_markers: Vec::new(),
@@ -371,6 +387,7 @@ impl WasmSimulation {
                 });
             }
         }
+        sim.update_soi_central();
         Self::to_json(Self::sync_packet(&sim, ui.show_orbits, true, true))
     }
 }

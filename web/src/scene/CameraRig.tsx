@@ -10,6 +10,7 @@ export function CameraRig({ controlsRef }: { controlsRef: React.RefObject<OrbitC
   const selectedBody = useSimStore((s) => s.selectedBody);
   const followSelection = useSimStore((s) => s.followSelection);
   const frameRequest = useSimStore((s) => s.frameRequest);
+  const centralBody = useSimStore((s) => s.planner?.central_body ?? null);
   const framingRef = useRef(false);
   const frameUntilRef = useRef(0);
   const target = useRef(new THREE.Vector3());
@@ -24,12 +25,20 @@ export function CameraRig({ controlsRef }: { controlsRef: React.RefObject<OrbitC
     const controls = controlsRef.current;
     if (!controls) return;
 
-    if (userCameraControlRef.current) {
-      controls.update();
-      return;
+    // Keep the depth range matched to the current zoom so we can fly from
+    // solar-system scale down to a vessel's orbit without clipping or z-fighting.
+    if (camera instanceof THREE.PerspectiveCamera) {
+      const viewDist = camera.position.distanceTo(controls.target);
+      const near = Math.min(Math.max(viewDist * 0.002, 1e-6), 1);
+      const far = Math.max(viewDist * 50, 4000);
+      if (Math.abs(camera.near - near) > near * 0.1 || camera.far !== far) {
+        camera.near = near;
+        camera.far = far;
+        camera.updateProjectionMatrix();
+      }
     }
 
-    if (!selectedBody) {
+    if (userCameraControlRef.current || !selectedBody) {
       controls.update();
       return;
     }
@@ -53,7 +62,7 @@ export function CameraRig({ controlsRef }: { controlsRef: React.RefObject<OrbitC
 
     const shouldFrame = framingRef.current && performance.now() < frameUntilRef.current;
     if (shouldFrame) {
-      const dist = Math.max(toScene(body.display_radius) * 12, 0.15);
+      const dist = frameDistance(body, centralBody);
       const dir = new THREE.Vector3(0.45, 0.35, 1).normalize();
       desiredCam.current.copy(target.current).add(dir.multiplyScalar(dist));
       camera.position.lerp(desiredCam.current, 1 - Math.exp(-8 * delta));
@@ -65,4 +74,25 @@ export function CameraRig({ controlsRef }: { controlsRef: React.RefObject<OrbitC
   });
 
   return null;
+}
+
+/** Frame the body together with its orbit around the current central body, so a
+ *  selected vessel shows its trajectory rather than just the dot. */
+function frameDistance(
+  body: import("@/lib/units").BodySnapshot,
+  centralBody: string | null,
+): number {
+  const central = centralBody
+    ? sceneBodiesRef.current.find((b) => b.name === centralBody)
+    : null;
+  if (central && central.name !== body.name) {
+    const orbitalR = Math.hypot(
+      toScene(body.position[0] - central.position[0]),
+      toScene(body.position[1] - central.position[1]),
+      toScene(body.position[2] - central.position[2]),
+    );
+    const dist = orbitalR * 2.4;
+    return Math.min(Math.max(dist, toScene(body.display_radius) * 4, 0.02), 60);
+  }
+  return Math.max(toScene(body.display_radius) * 12, 0.15);
 }

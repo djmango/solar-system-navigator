@@ -12,6 +12,7 @@ import { Badge } from "@/components/ui/badge";
 export function ManeuverPlanner() {
   const planner = useSimStore((s) => s.planner);
   const simTime = useSimStore((s) => s.simTime);
+  const targetPeriod = useSimStore((s) => s.targetPeriod);
   const selectedNodeIndex = useSimStore((s) => s.selectedNodeIndex);
   const setSelectedNodeIndex = useSimStore((s) => s.setSelectedNodeIndex);
   const lastHohmann = useSimStore((s) => s.lastHohmann);
@@ -66,6 +67,18 @@ export function ManeuverPlanner() {
           <span>Time to burn</span>
           <span className="font-mono text-amber-300/90">{formatTime(Math.max(0, burnUt - simTime))}</span>
         </div>
+        {editing && selectedNodeIndex !== null && (
+          <NodeTimeSlider
+            lead={Math.max(0, burnUt - simTime)}
+            maxLead={Math.max(targetPeriod * 2, burnUt - simTime, 3600)}
+            onCommit={(lead) =>
+              simDispatch(
+                { cmd: "set_node_time", index: selectedNodeIndex, time: simTime + lead },
+                { sync: "planner" },
+              )
+            }
+          />
+        )}
         <p className="text-[10px] leading-relaxed text-slate-500">
           {canPlan
             ? `Click ${target?.name ?? vesselHint}'s orbit to place a node · drag handles for Δv`
@@ -229,6 +242,46 @@ function addNode() {
 function clearNodes() {
   simDispatch({ cmd: "clear_nodes" });
   useSimStore.getState().setSelectedNodeIndex(null);
+}
+
+function NodeTimeSlider({
+  lead,
+  maxLead,
+  onCommit,
+}: {
+  lead: number;
+  maxLead: number;
+  onCommit: (lead: number) => void;
+}) {
+  // Local value during drag; commit (WASM round-trip + preview integration) on release.
+  const [local, setLocal] = useState(lead);
+  useEffect(() => setLocal(lead), [lead]);
+
+  const commit = (v: number) => onCommit(v);
+
+  return (
+    <div className="rounded-md border border-slate-700/50 bg-slate-900/50 p-2">
+      <div className="mb-1 flex items-center justify-between">
+        <span className="text-[11px] font-medium text-slate-300">Slide node along orbit</span>
+        <span className="font-mono text-[10px] text-amber-300/90">{formatTime(local)}</span>
+      </div>
+      <input
+        type="range"
+        min={0}
+        max={Math.max(maxLead, 1)}
+        step={Math.max(maxLead / 400, 1)}
+        value={Math.min(local, maxLead)}
+        onChange={(e) => setLocal(Number(e.target.value))}
+        onPointerUp={() => commit(local)}
+        onKeyUp={() => commit(local)}
+        className="h-2 w-full cursor-pointer accent-amber-400"
+      />
+      <div className="mt-0.5 flex justify-between text-[9px] text-slate-600">
+        <span>now</span>
+        <span>{formatTime(maxLead)}</span>
+      </div>
+    </div>
+  );
 }
 
 function DvRow({
