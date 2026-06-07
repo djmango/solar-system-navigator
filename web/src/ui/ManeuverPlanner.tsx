@@ -1,4 +1,4 @@
-import { ChevronDown, ChevronUp, Plus, Rocket, Trash2, Zap } from "lucide-react";
+import { ChevronDown, ChevronUp, FastForward, Plus, Rocket, Trash2, Zap } from "lucide-react";
 import { useEffect, useState } from "react";
 import { simDispatch } from "@/sim/useSimulation";
 import { useSimStore } from "@/store/simStore";
@@ -72,16 +72,30 @@ export function ManeuverPlanner() {
           <span className="font-mono text-amber-300/90">{formatTime(Math.max(0, burnUt - simTime))}</span>
         </div>
         {editing && selectedNodeIndex !== null && (
-          <NodeTimeSlider
-            lead={Math.max(0, burnUt - simTime)}
-            maxLead={Math.max(targetPeriod * 2, burnUt - simTime, 3600)}
-            onCommit={(lead) =>
-              simDispatch(
-                { cmd: "set_node_time", index: selectedNodeIndex, time: simTime + lead },
-                { sync: "planner" },
-              )
-            }
-          />
+          <>
+            <NodeTimeSlider
+              lead={Math.max(0, burnUt - simTime)}
+              maxLead={Math.max(targetPeriod * 2, burnUt - simTime, 3600)}
+              onCommit={(lead) =>
+                simDispatch(
+                  { cmd: "set_node_time", index: selectedNodeIndex, time: simTime + lead },
+                  { sync: "planner" },
+                )
+              }
+            />
+            {burnUt - simTime > 60 && (
+              <Button
+                variant="secondary"
+                size="sm"
+                className="w-full"
+                title="Warp to node (W)"
+                onClick={() => warpToSelectedNode(selectedNodeIndex)}
+              >
+                <FastForward className="h-3 w-3" />
+                Warp to node ({formatTime(Math.max(0, burnUt - simTime))})
+              </Button>
+            )}
+          </>
         )}
         <p className="text-[10px] leading-relaxed text-slate-500">
           {canPlan
@@ -158,6 +172,12 @@ export function ManeuverPlanner() {
             <Trash2 className="h-3 w-3" />
           </Button>
         </div>
+
+        {planner.hohmann_warning && (
+          <div className="rounded-md border border-amber-700/50 bg-amber-950/40 px-2 py-1.5 text-[10px] text-amber-200/90">
+            {planner.hohmann_warning}
+          </div>
+        )}
 
         {lastHohmann && (
           <div className="rounded-md border border-amber-800/40 bg-amber-950/30 px-2 py-1.5 text-[10px] text-amber-200/80">
@@ -256,6 +276,13 @@ function addNode() {
 function clearNodes() {
   simDispatch({ cmd: "clear_nodes" });
   useSimStore.getState().setSelectedNodeIndex(null);
+}
+
+function warpToSelectedNode(index: number) {
+  simDispatch(
+    { cmd: "warp_to_node", index, lead: 30 },
+    { notice: "Warped to maneuver node" },
+  );
 }
 
 function NodeTimeSlider({

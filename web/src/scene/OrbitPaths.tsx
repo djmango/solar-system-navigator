@@ -5,8 +5,15 @@ import * as THREE from "three";
 import { useSimStore } from "@/store/simStore";
 import { KSP_COLORS } from "@/lib/ksp";
 import { OrbitLine } from "./OrbitLine";
-import { bodyDefsRef, maneuverMarkersFlatRef, orbitPathsCacheRef } from "@/sim/sceneRefs";
+import {
+  bodyDefsRef,
+  maneuverMarkersFlatRef,
+  orbitPathsCacheRef,
+  sceneBodiesRef,
+  vesselDisplayScaleRef,
+} from "@/sim/sceneRefs";
 import { toScene } from "@/lib/units";
+import { centralBodyMeters, timedMarkersToScene } from "@/lib/intraSoiDisplay";
 
 export function OrbitPaths() {
   const showOrbits = useSimStore((s) => s.showOrbits);
@@ -75,6 +82,9 @@ export function ManeuverNodeMarkers() {
     void cacheEpoch;
     const flat = maneuverMarkersFlatRef.current;
     const nodes = planner?.nodes ?? [];
+    const displayScale = vesselDisplayScaleRef.current;
+    const centralM = centralBodyMeters(sceneBodiesRef.current, planner?.central_body ?? null);
+    const scenePts = timedMarkersToScene(flat, centralM, displayScale);
     const out: { pos: THREE.Vector3; nodeIndex: number }[] = [];
     for (let i = 0; i + 3 < flat.length; i += 4) {
       const t = flat[i];
@@ -88,8 +98,9 @@ export function ManeuverNodeMarkers() {
           nodeIndex = ni;
         }
       });
+      const ptIndex = i / 4;
       out.push({
-        pos: new THREE.Vector3(toScene(flat[i + 1]), toScene(flat[i + 2]), toScene(flat[i + 3])),
+        pos: scenePts[ptIndex] ?? new THREE.Vector3(),
         nodeIndex,
       });
     }

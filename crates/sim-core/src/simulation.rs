@@ -52,6 +52,8 @@ pub struct RoutePlannerState {
     pub soi_auto: bool,
     pub hohmann_target_radius: f64,
     pub last_hohmann: Option<HohmannTransfer>,
+    /// Non-fatal notice from the last Hohmann computation (eccentric-orbit warning).
+    pub hohmann_warning: Option<String>,
 }
 
 impl Default for RoutePlannerState {
@@ -70,6 +72,7 @@ impl Default for RoutePlannerState {
             soi_auto: true,
             hohmann_target_radius: AU * 1.524,
             last_hohmann: None,
+            hohmann_warning: None,
         }
     }
 }
@@ -145,6 +148,7 @@ impl Simulation {
         self.sim_time = 0.0;
         maneuver::reset_maneuver_execution(&mut self.planner.nodes);
         self.planner.last_hohmann = None;
+        self.planner.hohmann_warning = None;
         self.truth_paths = build_truth_paths_for_scenario(&self.scenario);
     }
 
@@ -313,6 +317,71 @@ impl Simulation {
     /// while stepping, so callers use this to keep them current while paused).
     pub fn refresh_diagnostics(&mut self) {
         self.update_diagnostics();
+    }
+
+    /// Fast-forward physics to `target_ut`, executing any maneuver nodes along the way.
+    pub fn propagate_to_time(&mut self, target_ut: f64) -> Result<(), String> {
+        if target_ut <= self.sim_time + 1.0e-6 {
+            return Ok(());
+        }
+        let central_name = self.planner.central_body.clone();
+        let target_name = self.resolve_target_name(central_name.as_deref());
+        let has_nodes = self.planner.nodes.iter().any(|n| !n.executed);
+
+        let mut guard = 0usize;
+        while self.sim_time < target_ut - 1.0e-6 && guard < 50_000 {
+            guard += 1;
+            let remaining = target_ut - self.sim_time;
+            let dt = remaining.min(3600.0);
+            match (&central_name, &target_name, has_nodes) {
+                (Some(central), Some(target), true) => {
+                    self.sim_time = truth::advance_state_with_maneuvers(
+                        &mut self.states,
+                        &mut self.planner.nodes,
+                        central,
+                        target,
+                        self.sim_time,
+                        dt,
+                        self.scenario.g,
+                        self.scenario.softening,
+                    );
+                }
+                _ => {
+                    self.states = truth::velocity_verlet_step(
+                        &self.states,
+                        self.scenario.g,
+                        self.scenario.softening,
+                        dt,
+                    );
+                    self.sim_time += dt;
+                }
+            }
+        }
+        if self.sim_time < target_ut - 1.0 {
+            return Err("warp to node did not reach target time".into());
+        }
+        self.update_soi_central();
+        self.update_diagnostics();
+        Ok(())
+    }
+
+    /// Warp to just before a maneuver node's burn time (KSP-style).
+    pub fn warp_to_node(&mut self, index: usize, lead_seconds: f64) -> Result<f64, String> {
+        let node = self
+            .planner
+            .nodes
+            .get(index)
+            .ok_or_else(|| format!("maneuver node {index} not found"))?;
+        if node.executed {
+            return Err("cannot warp to an executed maneuver node".into());
+        }
+        let lead = lead_seconds.max(1.0);
+        let target_ut = (node.time - lead).max(self.sim_time + 1.0);
+        if (node.time - self.sim_time) <= lead + 1.0 {
+            return Err("maneuver node is already due — no warp needed".into());
+        }
+        self.propagate_to_time(target_ut)?;
+        Ok(target_ut)
     }
 
     fn update_diagnostics(&mut self) {
@@ -568,19 +637,28 @@ impl Simulation {
         self.planner.soi_auto = auto;
     }
 
-    pub fn compute_hohmann(&mut self) -> Option<HohmannTransfer> {
+    pub fn compute_hohmann(&mut self) -> Result<HohmannTransfer, String> {
         let snapshots = self.soi_snapshots();
-        let central_name = self.planner.central_body.clone()?;
-        let target_name = self.planner.target_body.clone()?;
-        let xfer = planner::compute_hohmann_for_target(
+        let central_name = self
+            .planner
+            .central_body
+            .clone()
+            .ok_or_else(|| "no central body — select a vessel with SOI auto enabled".to_string())?;
+        let target_name = self
+            .planner
+            .target_body
+            .clone()
+            .ok_or_else(|| "no vessel selected for maneuver planning".to_string())?;
+        let result = planner::compute_hohmann_for_target(
             &snapshots,
             &central_name,
             &target_name,
             self.scenario.g,
             self.planner.hohmann_target_radius,
         )?;
-        self.planner.last_hohmann = Some(xfer);
-        Some(xfer)
+        self.planner.last_hohmann = Some(result.transfer);
+        self.planner.hohmann_warning = result.warning;
+        Ok(result.transfer)
     }
 
     pub fn apply_hohmann_departure_draft(&mut self, xfer: &HohmannTransfer) {
@@ -640,9 +718,6 @@ impl Simulation {
     }
 
     pub fn orbit_preview_flat(&self, body_name: &str, segments: usize) -> Vec<f64> {
-        let Some(state) = self.states.iter().find(|s| s.name == body_name) else {
-            return Vec::new();
-        };
         let central_name = self
             .scenario
             .bodies
@@ -650,6 +725,19 @@ impl Simulation {
             .find(|b| b.fixed)
             .map(|b| b.name.as_str())
             .unwrap_or("Sun");
+        self.orbit_preview_flat_around(body_name, central_name, segments)
+    }
+
+    /// Keplerian orbit path for `body_name` relative to `central_name`, in world meters.
+    pub fn orbit_preview_flat_around(
+        &self,
+        body_name: &str,
+        central_name: &str,
+        segments: usize,
+    ) -> Vec<f64> {
+        let Some(state) = self.states.iter().find(|s| s.name == body_name) else {
+            return Vec::new();
+        };
         let central = self.states.iter().find(|s| s.name == central_name);
         let (pos, vel, mu) = if let Some(c) = central {
             let rel = RelativeState::new(state.position - c.position, state.velocity - c.velocity);
@@ -673,6 +761,97 @@ impl Simulation {
                 }
             })
             .collect()
+    }
+
+    /// Orbit path for the active vessel, using the planner central body. When the
+    /// orbit is much smaller than the central body's display radius (LEO / lunar),
+    /// exaggerate it for rendering so it is visible at solar-system scale.
+    pub fn vessel_orbit_display_flat(&self, segments: usize) -> (Vec<f64>, f64) {
+        let Some(target_name) = self.planner.target_body.clone() else {
+            return (Vec::new(), 1.0);
+        };
+        let central_name = self
+            .planner
+            .central_body
+            .clone()
+            .or_else(|| {
+                self.scenario
+                    .bodies
+                    .iter()
+                    .find(|b| b.fixed)
+                    .map(|b| b.name.clone())
+            })
+            .unwrap_or_else(|| "Sun".to_string());
+
+        let flat = self.orbit_preview_flat_around(&target_name, &central_name, segments);
+        if flat.len() < 6 {
+            return (flat, 1.0);
+        }
+
+        let central_state = self.states.iter().find(|s| s.name == central_name);
+        let central_def = self.scenario.bodies.iter().find(|b| b.name == central_name);
+        let display_radius = central_def
+            .map(|d| d.display_radius(self.scenario.visual_exaggeration))
+            .unwrap_or(0.0);
+
+        let mut max_rel = 0.0_f64;
+        if let Some(c) = central_state {
+            for i in 0..(flat.len() / 3) {
+                let dx = flat[3 * i] - c.position.x;
+                let dy = flat[3 * i + 1] - c.position.y;
+                let dz = flat[3 * i + 2] - c.position.z;
+                max_rel = max_rel.max((dx * dx + dy * dy + dz * dz).sqrt());
+            }
+        }
+
+        let scale = if display_radius > 0.0 && max_rel > 0.0 && max_rel < display_radius * 0.45 {
+            (display_radius * 1.55) / max_rel
+        } else {
+            1.0
+        };
+
+        if (scale - 1.0).abs() < 1e-6 {
+            return (flat, 1.0);
+        }
+
+        let Some(c) = central_state else {
+            return (flat, 1.0);
+        };
+        let cx = c.position.x;
+        let cy = c.position.y;
+        let cz = c.position.z;
+        let mut scaled = Vec::with_capacity(flat.len());
+        for i in 0..(flat.len() / 3) {
+            scaled.push(cx + (flat[3 * i] - cx) * scale);
+            scaled.push(cy + (flat[3 * i + 1] - cy) * scale);
+            scaled.push(cz + (flat[3 * i + 2] - cz) * scale);
+        }
+        (scaled, scale)
+    }
+
+    /// Map a world-space click on a display-scaled intra-SOI orbit back to true meters.
+    pub fn unscale_intra_soi_click(
+        &self,
+        x: f64,
+        y: f64,
+        z: f64,
+        display_scale: f64,
+    ) -> (f64, f64, f64) {
+        if (display_scale - 1.0).abs() < 1e-6 {
+            return (x, y, z);
+        }
+        let Some(central_name) = self.planner.central_body.clone() else {
+            return (x, y, z);
+        };
+        let Some(c) = self.states.iter().find(|s| s.name == central_name) else {
+            return (x, y, z);
+        };
+        let inv = 1.0 / display_scale;
+        (
+            c.position.x + (x - c.position.x) * inv,
+            c.position.y + (y - c.position.y) * inv,
+            c.position.z + (z - c.position.z) * inv,
+        )
     }
 }
 
@@ -739,6 +918,16 @@ mod tests {
         // A past time is clamped into the future.
         sim.set_maneuver_node_time(0, sim.sim_time - 100.0).expect("set");
         assert!(sim.planner.nodes[0].time > sim.sim_time);
+    }
+
+    #[test]
+    fn warp_to_node_propagates_physics() {
+        let mut sim = Simulation::from_default_scenario().expect("load");
+        sim.add_maneuver_node_at_time(sim.sim_time + 50_000.0);
+        let target_ut = sim.planner.nodes[0].time - 30.0;
+        sim.warp_to_node(0, 30.0).expect("warp");
+        assert!((sim.sim_time - target_ut).abs() < 2.0);
+        assert!(sim.sim_time < sim.planner.nodes[0].time);
     }
 
     #[test]

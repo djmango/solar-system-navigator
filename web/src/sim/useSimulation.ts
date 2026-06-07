@@ -39,9 +39,10 @@ export interface SyncPacket {
   diagnostics: import("../lib/units").SimDiagnostics;
   planner: import("../lib/units").PlannerState;
   target_period?: number;
-  orbit_paths: { name: string; flat: number[] }[];
+  orbit_paths: { name: string; flat: number[]; display_scale?: number }[];
   maneuver_preview: number[];
   maneuver_markers: number[];
+  vessel_display_scale?: number;
   error?: string;
 }
 
@@ -123,6 +124,7 @@ function applySyncPacket(packet: SyncPacket, mode: SimSyncMode) {
       orbit_paths: packet.orbit_paths ?? [],
       maneuver_preview: packet.maneuver_preview ?? [],
       maneuver_markers: packet.maneuver_markers ?? [],
+      vessel_display_scale: packet.vessel_display_scale,
     });
   } else if (mode === "planner") {
     if (packet.planner) useSimStore.getState().setPlanner(packet.planner);
@@ -193,6 +195,7 @@ function runDriveFrame(sim: WasmSimulation, dt: number, now: number) {
       packet.orbit_paths ?? [],
       packet.maneuver_markers ?? [],
       wantPreview ? (packet.maneuver_preview ?? []) : undefined,
+      packet.vessel_display_scale,
     );
   }
 }

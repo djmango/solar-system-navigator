@@ -11,4 +11,5 @@ export type SimCommand =
   | { cmd: "step_once" }
   | { cmd: "compute_hohmann" }
   | { cmd: "apply_hohmann_departure" }
-  | { cmd: "add_hohmann_pair" };
+  | { cmd: "add_hohmann_pair" }
+  | { cmd: "warp_to_node"; index: number; lead?: number };

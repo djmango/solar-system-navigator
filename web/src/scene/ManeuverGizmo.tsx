@@ -12,7 +12,9 @@ import {
   maneuverMarkersFlatRef,
   maneuverPreviewFlatRef,
   sceneBodiesRef,
+  vesselDisplayScaleRef,
 } from "@/sim/sceneRefs";
+import { centralBodyMeters, scalePointAroundCentral } from "@/lib/intraSoiDisplay";
 
 type Axis = "prograde" | "normal" | "radial";
 
@@ -114,10 +116,13 @@ export function ManeuverGizmo() {
     const nodeM = nodeWorldMeters(node.time);
     if (!nodeM) return null;
 
-    const central = sceneBodiesRef.current.find((b) => b.name === planner.central_body);
-    const centralM = central
-      ? new THREE.Vector3(central.position[0], central.position[1], central.position[2])
-      : new THREE.Vector3();
+    const displayScale = vesselDisplayScaleRef.current;
+    const centralM =
+      centralBodyMeters(sceneBodiesRef.current, planner.central_body) ?? new THREE.Vector3();
+    const nodeDisplayM =
+      displayScale > 1.0001
+        ? scalePointAroundCentral(nodeM, centralM, displayScale)
+        : nodeM;
 
     const rHat = nodeM.clone().sub(centralM);
     if (rHat.lengthSq() === 0) rHat.set(1, 0, 0);
@@ -137,7 +142,7 @@ export function ManeuverGizmo() {
     const tOrtho = new THREE.Vector3().crossVectors(nHat, rHat).normalize();
 
     return {
-      pos: new THREE.Vector3(toScene(nodeM.x), toScene(nodeM.y), toScene(nodeM.z)),
+      pos: new THREE.Vector3(toScene(nodeDisplayM.x), toScene(nodeDisplayM.y), toScene(nodeDisplayM.z)),
       tHat: tOrtho,
       nHat,
       rHat,
@@ -267,7 +272,7 @@ function DragHandle({
   const onMove = (e: ThreeEvent<PointerEvent>) => {
     if (!dragging.current) return;
     e.stopPropagation();
-    const delta = axisDragDelta(worldAxis, origin, e.movementX, e.movementY, camera, 2.5);
+    const delta = axisDragDelta(worldAxis, origin, e.movementX, e.movementY, camera, 1.0);
     current.current = startValue.current + delta;
     onPreview(current.current);
   };

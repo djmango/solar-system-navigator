@@ -71,6 +71,7 @@ export interface PlannerState {
   soi_auto: boolean;
   hohmann_target_radius: number;
   last_hohmann: HohmannTransfer | null;
+  hohmann_warning?: string | null;
 }
 
 export interface HohmannTransfer {
