@@ -3,6 +3,7 @@ import { reloadScenarioByIndex, resetSimUiAfterReset, simDispatch } from "@/sim/
 import { useSimStore } from "@/store/simStore";
 import { warpDown, warpUp, WARP_LEVELS } from "@/lib/ksp";
 import { isVessel } from "@/lib/vessels";
+import { clearSelectedScratchNode, commandsAfterRemovingSelectedScratch } from "@/sim/maneuverNodeUx";
 
 function isTypingTarget(target: EventTarget | null): boolean {
   if (!(target instanceof HTMLElement)) return false;
@@ -53,6 +54,7 @@ export function useKeyboardShortcuts() {
           break;
         case "Tab":
           e.preventDefault();
+          clearSelectedScratchNode();
           store.cycleSelection(e.shiftKey);
           break;
         case "KeyG":
@@ -67,9 +69,9 @@ export function useKeyboardShortcuts() {
             break;
           }
           simDispatch(
-            { cmd: "add_node" },
+            commandsAfterRemovingSelectedScratch({ cmd: "add_node" }),
             {
-              notice: "Maneuver node created",
+              notice: "Draft maneuver node created — drag a handle or enter Δv to keep it",
               onComplete: () => {
                 const n = useSimStore.getState().planner?.nodes.length ?? 0;
                 if (n > 0) store.setSelectedNodeIndex(n - 1);
@@ -110,14 +112,19 @@ export function useKeyboardShortcuts() {
             break;
           }
           if (e.shiftKey) {
-            simDispatch([{ cmd: "compute_hohmann" }, { cmd: "add_hohmann_pair" }], {
+            simDispatch(commandsAfterRemovingSelectedScratch([{ cmd: "compute_hohmann" }, { cmd: "add_hohmann_pair" }]), {
               onComplete: () => {
                 const n = useSimStore.getState().planner?.nodes.length ?? 0;
                 if (n >= 2) store.setSelectedNodeIndex(n - 2);
               },
             });
           } else {
-            simDispatch([{ cmd: "compute_hohmann" }, { cmd: "apply_hohmann_departure" }]);
+            simDispatch(
+              commandsAfterRemovingSelectedScratch([
+                { cmd: "compute_hohmann" },
+                { cmd: "apply_hohmann_departure" },
+              ]),
+            );
           }
           break;
         case "Slash":

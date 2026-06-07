@@ -62,7 +62,7 @@ impl Default for RoutePlannerState {
             nodes: Vec::new(),
             central_body: None,
             target_body: None,
-            draft_prograde: 500.0,
+            draft_prograde: 0.0,
             draft_normal: 0.0,
             draft_radial: 0.0,
             default_burn_offset: DAY,
@@ -411,6 +411,18 @@ impl Simulation {
         self.planner.show_previews = true;
     }
 
+    pub fn add_empty_maneuver_node_at_time(&mut self, time: f64) {
+        let time = time.max(self.sim_time + 1.0);
+        self.planner.nodes.push(ManeuverNode {
+            time,
+            prograde: 0.0,
+            normal: 0.0,
+            radial: 0.0,
+            executed: false,
+        });
+        self.planner.show_previews = true;
+    }
+
     /// Place a maneuver node at the orbit point nearest to a world-space click (meters, SI).
     pub fn add_maneuver_node_at_world_position(
         &mut self,
@@ -426,7 +438,7 @@ impl Simulation {
         }
         .or_else(|| self.time_at_nearest_target_orbit(pos))
         .ok_or_else(|| "could not map click to an orbit".to_string())?;
-        self.add_maneuver_node_at_time(time);
+        self.add_empty_maneuver_node_at_time(time);
         Ok(time)
     }
 

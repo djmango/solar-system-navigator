@@ -13,6 +13,7 @@ import { SceneErrorBoundary } from "./SceneErrorBoundary";
 import { userCameraControlRef } from "@/sim/sceneRefs";
 import { resetSceneFault } from "@/sim/useSimulation";
 import { useSimStore } from "@/store/simStore";
+import { clearOrDeselectSelectedNode } from "@/sim/maneuverNodeUx";
 
 function SceneFallback() {
   return (
@@ -41,6 +42,9 @@ export function SolarScene() {
       }}
       dpr={[1, 1.5]}
       frameloop="always"
+      onPointerMissed={() => {
+        clearOrDeselectSelectedNode();
+      }}
       onCreated={({ gl }) => {
         const canvas = gl.domElement;
         canvas.addEventListener("webglcontextlost", (e) => {

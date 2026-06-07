@@ -6,6 +6,7 @@ import { simDispatch } from "@/sim/useSimulation";
 import { useSimStore } from "@/store/simStore";
 import { flatKey } from "@/lib/flatPath";
 import { METERS_PER_UNIT, toScene } from "@/lib/units";
+import { commandsAfterRemovingSelectedScratch } from "@/sim/maneuverNodeUx";
 
 interface OrbitLineProps {
   flat?: number[];
@@ -60,14 +61,16 @@ export function OrbitLine({
     e.stopPropagation();
     const meters = e.point.clone().multiplyScalar(METERS_PER_UNIT);
     simDispatch(
+      commandsAfterRemovingSelectedScratch(
       {
         cmd: "add_node_at_world",
         x: meters.x,
         y: meters.y,
         z: meters.z,
       },
+      ),
       {
-        notice: "Maneuver node placed on orbit",
+        notice: "Draft maneuver node placed — drag a handle or enter Δv to keep it",
         onComplete: () => {
           const planner = useSimStore.getState().planner;
           if (planner?.nodes.length) {

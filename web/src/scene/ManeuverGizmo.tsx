@@ -28,6 +28,7 @@ const AXES: { key: Axis; color: string }[] = [
 // camera→node distance, so it never balloons when zoomed in or vanishes far out.
 const SCREEN_SCALE = 0.07;
 const HANDLE_R = 0.16;
+const HANDLE_HIT_R = 0.34;
 
 interface NodeFrame {
   pos: THREE.Vector3; // scene-space node position
@@ -256,6 +257,7 @@ function DragHandle({
 }) {
   const { camera } = useThree();
   const dragging = useRef(false);
+  const startPointer = useRef(new THREE.Vector2());
   const startValue = useRef(value);
   const current = useRef(value);
   const [hover, setHover] = useState(false);
@@ -265,6 +267,7 @@ function DragHandle({
   const onDown = (e: ThreeEvent<PointerEvent>) => {
     e.stopPropagation();
     dragging.current = true;
+    startPointer.current.set(e.clientX, e.clientY);
     startValue.current = value;
     current.current = value;
     (e.target as Element).setPointerCapture?.(e.pointerId);
@@ -272,7 +275,14 @@ function DragHandle({
   const onMove = (e: ThreeEvent<PointerEvent>) => {
     if (!dragging.current) return;
     e.stopPropagation();
-    const delta = axisDragDelta(worldAxis, origin, e.movementX, e.movementY, camera, 1.0);
+    const delta = axisDragDelta(
+      worldAxis,
+      origin,
+      e.clientX - startPointer.current.x,
+      e.clientY - startPointer.current.y,
+      camera,
+      1.0,
+    );
     current.current = startValue.current + delta;
     onPreview(current.current);
   };
@@ -284,17 +294,23 @@ function DragHandle({
   };
 
   return (
-    <mesh
-      position={[dir.x * sign, dir.y * sign, dir.z * sign]}
-      scale={hover ? HANDLE_R * 1.3 : HANDLE_R}
-      onPointerDown={onDown}
-      onPointerMove={onMove}
-      onPointerUp={onUp}
-      onPointerOver={() => setHover(true)}
-      onPointerOut={() => !dragging.current && setHover(false)}
-    >
-      <sphereGeometry args={[1, 12, 12]} />
-      <meshBasicMaterial color={color} toneMapped={false} transparent opacity={sign > 0 ? 0.95 : 0.5} />
-    </mesh>
+    <group position={[dir.x * sign, dir.y * sign, dir.z * sign]}>
+      <mesh
+        scale={HANDLE_HIT_R}
+        onPointerDown={onDown}
+        onPointerMove={onMove}
+        onPointerUp={onUp}
+        onPointerCancel={onUp}
+        onPointerOver={() => setHover(true)}
+        onPointerOut={() => !dragging.current && setHover(false)}
+      >
+        <sphereGeometry args={[1, 12, 12]} />
+        <meshBasicMaterial transparent opacity={0} depthWrite={false} />
+      </mesh>
+      <mesh scale={hover ? HANDLE_R * 1.3 : HANDLE_R}>
+        <sphereGeometry args={[1, 12, 12]} />
+        <meshBasicMaterial color={color} toneMapped={false} transparent opacity={sign > 0 ? 0.95 : 0.5} />
+      </mesh>
+    </group>
   );
 }

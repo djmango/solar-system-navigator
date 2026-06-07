@@ -6,6 +6,7 @@ import { vesselBodies } from "@/lib/vessels";
 import { KSP_SHORTCUTS } from "@/lib/ksp";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { clearSelectedScratchNode } from "@/sim/maneuverNodeUx";
 
 export function ViewControls() {
   const showOrbits = useSimStore((s) => s.showOrbits);
@@ -68,7 +69,10 @@ export function ViewControls() {
             <select
               className="mt-0.5 w-full rounded-md border border-slate-600 bg-slate-950 px-2 py-1 text-xs text-slate-200"
               value={maneuverVessel ?? vessels[0]?.name ?? ""}
-              onChange={(e) => selectManeuverVessel(e.target.value)}
+              onChange={(e) => {
+                clearSelectedScratchNode();
+                selectManeuverVessel(e.target.value);
+              }}
             >
               {vessels.map((b) => (
                 <option key={b.name} value={b.name}>

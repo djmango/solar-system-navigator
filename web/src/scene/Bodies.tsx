@@ -8,6 +8,7 @@ import type { BodySnapshot } from "@/lib/units";
 import { loadPlanetTexture } from "./textureCache";
 import { bodyDefsRef, sceneBodiesRef } from "@/sim/sceneRefs";
 import { isVessel } from "@/lib/vessels";
+import { clearSelectedScratchNode } from "@/sim/maneuverNodeUx";
 
 const SPHERE = new THREE.SphereGeometry(1, 32, 32);
 const ATMOSPHERE = new THREE.SphereGeometry(1, 20, 20);
@@ -52,6 +53,7 @@ function BodyMesh({ def }: { def: BodySnapshot }) {
 
   const onSelect = (e: ThreeEvent<MouseEvent>) => {
     e.stopPropagation();
+    clearSelectedScratchNode();
     focusBody(def.name);
     if (isVessel(def)) {
       useSimStore.getState().setManeuverVessel(def.name);
@@ -64,6 +66,7 @@ function BodyMesh({ def }: { def: BodySnapshot }) {
 
   const onFocus = (e: ThreeEvent<MouseEvent>) => {
     e.stopPropagation();
+    clearSelectedScratchNode();
     focusBody(def.name);
   };
 

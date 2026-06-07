@@ -8,6 +8,11 @@ import { isVessel } from "@/lib/vessels";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import {
+  commandsAfterRemovingSelectedScratch,
+  isScratchNode,
+  selectNodeWithScratchCleanup,
+} from "@/sim/maneuverNodeUx";
 
 export function ManeuverPlanner() {
   const planner = useSimStore((s) => s.planner);
@@ -41,6 +46,7 @@ export function ManeuverPlanner() {
   const radial = editing?.radial ?? planner.draft_radial;
   const totalDv = Math.hypot(prograde, normal, radial);
   const burnUt = editing?.time ?? simTime + planner.default_burn_offset;
+  const editingScratch = isScratchNode(editing ?? undefined);
 
   const setDv = (p: number, n: number, r: number) => {
     if (selectedNodeIndex !== null) {
@@ -99,9 +105,14 @@ export function ManeuverPlanner() {
         )}
         <p className="text-[10px] leading-relaxed text-slate-500">
           {canPlan
-            ? `Click ${target?.name ?? vesselHint}'s orbit to place a node · drag handles for Δv`
+            ? `Click ${target?.name ?? vesselHint}'s orbit to stage a draft node · drag handles or enter Δv to keep it`
             : `Select a vessel (${vesselHint}, …) in View → Vessel to plan burns`}
         </p>
+        {editingScratch && (
+          <div className="rounded-md border border-amber-700/40 bg-amber-950/30 px-2 py-1.5 text-[10px] text-amber-200/85">
+            Draft node: it will disappear if you click away without adding Δv.
+          </div>
+        )}
 
         {actionNotice && (
           <div className="flex items-start justify-between gap-2 rounded-md border border-sky-800/50 bg-sky-950/40 px-2 py-1.5 text-[10px] text-sky-200">
@@ -160,10 +171,12 @@ export function ManeuverPlanner() {
             size="sm"
             title="Hohmann (H)"
             onClick={() =>
-              simDispatch([
-                { cmd: "compute_hohmann" },
-                { cmd: "apply_hohmann_departure" },
-              ])
+              simDispatch(
+                commandsAfterRemovingSelectedScratch([
+                  { cmd: "compute_hohmann" },
+                  { cmd: "apply_hohmann_departure" },
+                ]),
+              )
             }
           >
             <Zap className="h-3 w-3" />
@@ -189,7 +202,7 @@ export function ManeuverPlanner() {
               className="mt-1 h-6 w-full text-amber-300"
               onClick={() =>
                 simDispatch(
-                  { cmd: "add_hohmann_pair" },
+                  commandsAfterRemovingSelectedScratch({ cmd: "add_hohmann_pair" }),
                   {
                     onComplete: () => {
                       const n = useSimStore.getState().planner?.nodes.length ?? 0;
@@ -223,7 +236,7 @@ export function ManeuverPlanner() {
                           : "border-slate-700/50 bg-slate-900/40 text-slate-400 hover:bg-slate-800/60"
                       } ${n.executed ? "opacity-45 line-through" : ""}`}
                       onClick={() => {
-                        setSelectedNodeIndex(i);
+                        selectNodeWithScratchCleanup(i);
                         simDispatch({
                           cmd: "set_draft_dv",
                           prograde: n.prograde,
@@ -234,7 +247,7 @@ export function ManeuverPlanner() {
                     >
                       <span className="font-mono">MN{i + 1}</span>
                       <span>{formatTime(n.time)}</span>
-                      <Badge variant="maneuver">{dv.toFixed(0)} m/s</Badge>
+                      <Badge variant="maneuver">{isScratchNode(n) ? "draft" : `${dv.toFixed(0)} m/s`}</Badge>
                     </button>
                   </li>
                 );
@@ -262,9 +275,9 @@ export function ManeuverPlanner() {
 
 function addNode() {
   simDispatch(
-    { cmd: "add_node" },
+    commandsAfterRemovingSelectedScratch({ cmd: "add_node" }),
     {
-      notice: "Maneuver node created",
+      notice: "Draft maneuver node created — drag a handle or enter Δv to keep it",
       onComplete: () => {
         const n = useSimStore.getState().planner?.nodes.length ?? 0;
         if (n > 0) useSimStore.getState().setSelectedNodeIndex(n - 1);

@@ -14,10 +14,12 @@ import {
 } from "@/sim/sceneRefs";
 import { toScene } from "@/lib/units";
 import { centralBodyMeters, timedMarkersToScene } from "@/lib/intraSoiDisplay";
+import { selectNodeWithScratchCleanup } from "@/sim/maneuverNodeUx";
 
 export function OrbitPaths() {
   const showOrbits = useSimStore((s) => s.showOrbits);
   const maneuverVessel = useSimStore((s) => s.maneuverVessel);
+  const selectedNodeIndex = useSimStore((s) => s.selectedNodeIndex);
   const cacheEpoch = useSimStore((s) => s.sceneCacheEpoch);
 
   // Pick band scales with the orbit's own size so it is easy to click at the
@@ -51,7 +53,9 @@ export function OrbitPaths() {
   return (
     <group>
       {paths.map(({ name, flat, key }) => {
-        const pickable = name === maneuverVessel;
+        // The orbit's invisible pick tube can overlap the maneuver gizmo.
+        // Disable it while editing a node so Δv handles receive pointer drags.
+        const pickable = name === maneuverVessel && selectedNodeIndex === null;
         return flat.length >= 6 ? (
           <OrbitLine
             key={`${name}-${key}`}
@@ -74,7 +78,6 @@ export function ManeuverNodeMarkers() {
   const cacheEpoch = useSimStore((s) => s.sceneCacheEpoch);
   const planner = useSimStore((s) => s.planner);
   const selectedNodeIndex = useSimStore((s) => s.selectedNodeIndex);
-  const setSelectedNodeIndex = useSimStore((s) => s.setSelectedNodeIndex);
 
   // Markers come from WASM as [t,x,y,z,...] for unexecuted nodes only; map each
   // back to its planner-node index so clicking selects the right node.
@@ -116,7 +119,7 @@ export function ManeuverNodeMarkers() {
             key={i}
             pos={pos}
             selected={false}
-            onSelect={() => nodeIndex >= 0 && setSelectedNodeIndex(nodeIndex)}
+            onSelect={() => nodeIndex >= 0 && selectNodeWithScratchCleanup(nodeIndex)}
           />
         ),
       )}
