@@ -228,7 +228,12 @@ impl Simulation {
         let Some(target) = self.states.iter().find(|s| s.name == target_name) else {
             return;
         };
-        let central = soi::dominant_soi_body(target.position, &snapshots, primary_name);
+        let central = soi::dominant_soi_body(
+            target.position,
+            &snapshots,
+            primary_name,
+            Some(&target_name),
+        );
         self.planner.central_body = Some(central.to_string());
     }
 
@@ -257,19 +262,51 @@ impl Simulation {
         let dt_base = real_dt * self.speed;
         let steps = self.ticks_per_frame.max(1);
 
+        // Resolve the burn frame once per frame; SOI auto-switching is applied
+        // between frames in `update_soi_central`.
+        let central_name = self.planner.central_body.clone();
+        let target_name = self.resolve_target_name(central_name.as_deref());
+        let has_nodes = self.planner.nodes.iter().any(|n| !n.executed);
+
         for _ in 0..steps {
-            self.execute_maneuver_burns();
             self.update_diagnostics();
-            self.states = truth::velocity_verlet_step(
-                &self.states,
-                self.scenario.g,
-                self.scenario.softening,
-                dt_base,
-            );
-            self.sim_time += dt_base;
+            match (&central_name, &target_name, has_nodes) {
+                (Some(central), Some(target), true) => {
+                    self.sim_time = truth::advance_state_with_maneuvers(
+                        &mut self.states,
+                        &mut self.planner.nodes,
+                        central,
+                        target,
+                        self.sim_time,
+                        dt_base,
+                        self.scenario.g,
+                        self.scenario.softening,
+                    );
+                }
+                _ => {
+                    self.states = truth::velocity_verlet_step(
+                        &self.states,
+                        self.scenario.g,
+                        self.scenario.softening,
+                        dt_base,
+                    );
+                    self.sim_time += dt_base;
+                }
+            }
         }
 
         self.update_soi_central();
+    }
+
+    /// Vessel that receives burns: the planner target, else the first body that
+    /// is not the central reference.
+    fn resolve_target_name(&self, central_name: Option<&str>) -> Option<String> {
+        self.planner.target_body.clone().or_else(|| {
+            self.states
+                .iter()
+                .find(|s| Some(s.name.as_str()) != central_name)
+                .map(|s| s.name.clone())
+        })
     }
 
     fn update_diagnostics(&mut self) {
@@ -280,55 +317,6 @@ impl Simulation {
             total_energy: ke + pe,
             body_count: self.states.len() as u32,
         };
-    }
-
-    fn execute_maneuver_burns(&mut self) {
-        if self.planner.nodes.is_empty() {
-            return;
-        }
-        let Some(central_name) = self.planner.central_body.clone() else {
-            return;
-        };
-        let Some(central) = self.states.iter().find(|s| s.name == central_name) else {
-            return;
-        };
-        let central_pos = central.position;
-        let central_vel = central.velocity;
-
-        let target_name = self.planner.target_body.clone().or_else(|| {
-            self.states
-                .iter()
-                .find(|s| s.name != central_name)
-                .map(|s| s.name.clone())
-        });
-        let Some(target_name) = target_name else {
-            return;
-        };
-        let Some(target) = self.states.iter().find(|s| s.name == target_name) else {
-            return;
-        };
-        let ship_pos = target.position;
-        let mut rel_vel = target.velocity - central_vel;
-        let mut any_burn = false;
-
-        for node in &mut self.planner.nodes {
-            if node.executed || self.sim_time < node.time {
-                continue;
-            }
-            let rel = RelativeState::new(ship_pos - central_pos, rel_vel);
-            rel_vel = orbit::apply_tnw_delta_v(rel, node.prograde, node.normal, node.radial);
-            node.executed = true;
-            any_burn = true;
-        }
-
-        if !any_burn {
-            return;
-        }
-
-        let inertial = central_vel + rel_vel;
-        if let Some(target) = self.states.iter_mut().find(|s| s.name == target_name) {
-            target.velocity = inertial;
-        }
     }
 
     pub fn add_maneuver_node(&mut self) {
@@ -716,5 +704,46 @@ mod tests {
         let sim = Simulation::from_default_scenario().expect("load");
         let buf = sim.state_buffer();
         assert_eq!(buf.len(), 2 + sim.states.len() * 6);
+    }
+
+    #[test]
+    fn planned_burn_alters_live_trajectory_under_warp() {
+        // A node placed in the near future must actually fire and bend the live
+        // trajectory, even though each warped step covers thousands of seconds.
+        let mut sim = Simulation::from_default_scenario().expect("load");
+        let target = sim.planner.target_body.clone().expect("default target");
+        let mut baseline = Simulation::from_default_scenario().expect("load");
+
+        sim.planner.draft_prograde = 5_000.0;
+        sim.add_maneuver_node_at_time(sim.sim_time + 100.0);
+        assert_eq!(sim.planner.nodes.len(), 1);
+
+        for _ in 0..60 {
+            sim.step(1.0 / 60.0);
+            baseline.step(1.0 / 60.0);
+        }
+
+        assert!(
+            sim.planner.nodes[0].executed,
+            "node should have fired during a warped step"
+        );
+
+        let burned = sim
+            .states
+            .iter()
+            .find(|s| s.name == target)
+            .unwrap()
+            .position;
+        let coast = baseline
+            .states
+            .iter()
+            .find(|s| s.name == target)
+            .unwrap()
+            .position;
+        let divergence = (burned - coast).length();
+        assert!(
+            divergence > 1.0e7,
+            "prograde burn should visibly change the trajectory; divergence {divergence} m"
+        );
     }
 }
