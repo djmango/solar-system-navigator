@@ -100,7 +100,12 @@ export function useKeyboardShortcuts() {
             break;
           }
           if (e.shiftKey) {
-            simDispatch([{ cmd: "compute_hohmann" }, { cmd: "add_hohmann_pair" }]);
+            simDispatch([{ cmd: "compute_hohmann" }, { cmd: "add_hohmann_pair" }], {
+              onComplete: () => {
+                const n = useSimStore.getState().planner?.nodes.length ?? 0;
+                if (n >= 2) store.setSelectedNodeIndex(n - 2);
+              },
+            });
           } else {
             simDispatch([{ cmd: "compute_hohmann" }, { cmd: "apply_hohmann_departure" }]);
           }

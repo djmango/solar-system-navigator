@@ -330,10 +330,11 @@ impl WasmSimulation {
         if real_dt > 0.0 && real_dt < 0.5 && !ui.paused {
             sim.step(real_dt);
         }
-        // Keep the SOI central body current even while paused, so the burn
-        // frame, orbital period, and camera framing reflect the vessel's actual
-        // sphere of influence rather than the scenario primary.
+        // Keep the SOI central body and diagnostics current even while paused,
+        // so the burn frame, orbital period, camera framing, and energy readout
+        // reflect the vessel's actual state rather than the scenario primary.
         sim.update_soi_central();
+        sim.refresh_diagnostics();
         Self::to_json(Self::sync_packet(
             &sim,
             ui.show_orbits,

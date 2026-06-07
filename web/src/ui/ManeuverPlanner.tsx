@@ -27,8 +27,12 @@ export function ManeuverPlanner() {
   const canPlan = target ? isVessel(target) : false;
   const vesselHint = bodies.find((b) => isVessel(b))?.name ?? "vessel";
 
+  // An executed node is finalized — don't drive the editor from it (edits would
+  // be rejected by the sim); fall back to the draft for the next node.
   const editing =
-    selectedNodeIndex !== null && planner.nodes[selectedNodeIndex]
+    selectedNodeIndex !== null &&
+    planner.nodes[selectedNodeIndex] &&
+    !planner.nodes[selectedNodeIndex].executed
       ? planner.nodes[selectedNodeIndex]
       : null;
 
@@ -163,7 +167,17 @@ export function ManeuverPlanner() {
               variant="ghost"
               size="sm"
               className="mt-1 h-6 w-full text-amber-300"
-              onClick={() => simDispatch({ cmd: "add_hohmann_pair" })}
+              onClick={() =>
+                simDispatch(
+                  { cmd: "add_hohmann_pair" },
+                  {
+                    onComplete: () => {
+                      const n = useSimStore.getState().planner?.nodes.length ?? 0;
+                      if (n >= 2) useSimStore.getState().setSelectedNodeIndex(n - 2);
+                    },
+                  },
+                )
+              }
             >
               Shift+H · Add burn pair
             </Button>

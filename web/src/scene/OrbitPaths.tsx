@@ -13,12 +13,26 @@ export function OrbitPaths() {
   const maneuverVessel = useSimStore((s) => s.maneuverVessel);
   const cacheEpoch = useSimStore((s) => s.sceneCacheEpoch);
 
+  // Pick band scales with the orbit's own size so it is easy to click at the
+  // zoom where that orbit is framed (a few px is unusable). Falls back to the
+  // body radius when the path isn't cached yet.
   const pickRadius = useMemo(() => {
+    void cacheEpoch;
+    const entry = orbitPathsCacheRef.current.find((p) => p.name === maneuverVessel);
+    if (entry && entry.flat.length >= 6) {
+      let maxR = 0;
+      for (let i = 0; i + 2 < entry.flat.length; i += 3) {
+        const r = Math.hypot(entry.flat[i], entry.flat[i + 1], entry.flat[i + 2]);
+        if (r > maxR) maxR = r;
+      }
+      const sceneR = toScene(maxR);
+      if (sceneR > 0) return Math.min(Math.max(sceneR * 0.04, 0.01), 0.25);
+    }
     const body =
       bodyDefsRef.current.find((b) => b.name === maneuverVessel) ??
       useSimStore.getState().bodies.find((b) => b.name === maneuverVessel);
     if (!body) return 0.028;
-    return Math.max(toScene(body.display_radius) * 0.35, 0.008);
+    return Math.max(toScene(body.display_radius) * 0.35, 0.02);
   }, [maneuverVessel, cacheEpoch]);
 
   const paths = useMemo(() => {

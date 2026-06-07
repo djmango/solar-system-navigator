@@ -90,7 +90,9 @@ export function ManeuverGizmo() {
   } | null>(null);
 
   const node =
-    selectedNodeIndex !== null && planner?.nodes[selectedNodeIndex]
+    selectedNodeIndex !== null &&
+    planner?.nodes[selectedNodeIndex] &&
+    !planner.nodes[selectedNodeIndex].executed
       ? planner.nodes[selectedNodeIndex]
       : null;
 

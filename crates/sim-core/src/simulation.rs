@@ -309,6 +309,12 @@ impl Simulation {
         })
     }
 
+    /// Recompute energy diagnostics on demand (the live loop only refreshes them
+    /// while stepping, so callers use this to keep them current while paused).
+    pub fn refresh_diagnostics(&mut self) {
+        self.update_diagnostics();
+    }
+
     fn update_diagnostics(&mut self) {
         let (ke, pe) = total_energy(&self.states, self.scenario.g, self.scenario.softening);
         self.diagnostics = SimDiagnostics {
