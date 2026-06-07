@@ -6,10 +6,13 @@ import * as THREE from "three";
 import { useSimStore } from "@/store/simStore";
 import { toScene } from "@/lib/units";
 import { KSP_COLORS } from "@/lib/ksp";
-import { axisDragDelta, tnwFrameForVessel } from "@/lib/orbitPick";
+import { axisDragDelta } from "@/lib/orbitPick";
 import { simDispatch } from "@/sim/useSimulation";
-import { sceneBodiesRef } from "@/sim/sceneRefs";
-import { isVessel } from "@/lib/vessels";
+import {
+  maneuverMarkersFlatRef,
+  maneuverPreviewFlatRef,
+  sceneBodiesRef,
+} from "@/sim/sceneRefs";
 
 type Axis = "prograde" | "normal" | "radial";
 
@@ -19,204 +22,272 @@ const AXES: { key: Axis; color: string }[] = [
   { key: "radial", color: KSP_COLORS.radial },
 ];
 
-const GIZMO_ARROW_LEN = 0.045;
-const GIZMO_HANDLE_SCALE = 0.004;
+// Gizmo size is held constant in screen space: arm length ≈ this fraction of the
+// camera→node distance, so it never balloons when zoomed in or vanishes far out.
+const SCREEN_SCALE = 0.07;
+const HANDLE_R = 0.16;
 
-/** KSP-style TNW Δv handles — only on vessels; WASM updated on pointer up. */
+interface NodeFrame {
+  pos: THREE.Vector3; // scene-space node position
+  tHat: THREE.Vector3;
+  nHat: THREE.Vector3;
+  rHat: THREE.Vector3;
+}
+
+function nodeWorldMeters(nodeTime: number): THREE.Vector3 | null {
+  const flat = maneuverMarkersFlatRef.current;
+  let best: THREE.Vector3 | null = null;
+  let bestDt = Infinity;
+  for (let i = 0; i + 3 < flat.length; i += 4) {
+    const dt = Math.abs(flat[i] - nodeTime);
+    if (dt < bestDt) {
+      bestDt = dt;
+      best = new THREE.Vector3(flat[i + 1], flat[i + 2], flat[i + 3]);
+    }
+  }
+  return best;
+}
+
+/** Prograde tangent at the node from the predicted (amber) path, in meters. */
+function previewTangentMeters(nodeM: THREE.Vector3): THREE.Vector3 | null {
+  const flat = maneuverPreviewFlatRef.current;
+  const n = Math.floor(flat.length / 3);
+  if (n < 2) return null;
+  let bestI = 0;
+  let bestD = Infinity;
+  for (let i = 0; i < n; i++) {
+    const dx = flat[i * 3] - nodeM.x;
+    const dy = flat[i * 3 + 1] - nodeM.y;
+    const dz = flat[i * 3 + 2] - nodeM.z;
+    const d = dx * dx + dy * dy + dz * dz;
+    if (d < bestD) {
+      bestD = d;
+      bestI = i;
+    }
+  }
+  const a = Math.max(0, bestI - 1);
+  const b = Math.min(n - 1, bestI + 1);
+  if (a === b) return null;
+  const t = new THREE.Vector3(
+    flat[b * 3] - flat[a * 3],
+    flat[b * 3 + 1] - flat[a * 3 + 1],
+    flat[b * 3 + 2] - flat[a * 3 + 2],
+  );
+  return t.lengthSq() > 0 ? t.normalize() : null;
+}
+
+/** KSP-style TNW Δv handles, anchored on the selected node, constant screen size. */
 export function ManeuverGizmo() {
   const groupRef = useRef<THREE.Group>(null);
-  const maneuverVessel = useSimStore((s) => s.maneuverVessel);
   const planner = useSimStore((s) => s.planner);
   const selectedNodeIndex = useSimStore((s) => s.selectedNodeIndex);
-  const showGizmo = useSimStore((s) => s.showOrbits);
+  const maneuverVessel = useSimStore((s) => s.maneuverVessel);
+  const cacheEpoch = useSimStore((s) => s.sceneCacheEpoch);
   const [dragValues, setDragValues] = useState<{
     prograde: number;
     normal: number;
     radial: number;
   } | null>(null);
 
-  const editing =
+  const node =
     selectedNodeIndex !== null && planner?.nodes[selectedNodeIndex]
       ? planner.nodes[selectedNodeIndex]
       : null;
 
   const baseValues = useMemo(
     () => ({
-      prograde: editing?.prograde ?? planner?.draft_prograde ?? 0,
-      normal: editing?.normal ?? planner?.draft_normal ?? 0,
-      radial: editing?.radial ?? planner?.draft_radial ?? 0,
+      prograde: node?.prograde ?? 0,
+      normal: node?.normal ?? 0,
+      radial: node?.radial ?? 0,
     }),
-    [editing, planner],
+    [node],
   );
-
   const values = dragValues ?? baseValues;
 
-  useFrame(() => {
-    if (!groupRef.current || !maneuverVessel) return;
-    const vessel = sceneBodiesRef.current.find((b) => b.name === maneuverVessel);
-    if (!vessel) return;
-    groupRef.current.position.set(
-      toScene(vessel.position[0]),
-      toScene(vessel.position[1]),
-      toScene(vessel.position[2]),
-    );
+  // Recompute the burn frame on each sync / selection change. Positions are
+  // effectively static while paused (the normal planning case).
+  const frame = useMemo<NodeFrame | null>(() => {
+    if (!node || !planner) return null;
+    void cacheEpoch;
+    const nodeM = nodeWorldMeters(node.time);
+    if (!nodeM) return null;
+
+    const central = sceneBodiesRef.current.find((b) => b.name === planner.central_body);
+    const centralM = central
+      ? new THREE.Vector3(central.position[0], central.position[1], central.position[2])
+      : new THREE.Vector3();
+
+    const rHat = nodeM.clone().sub(centralM);
+    if (rHat.lengthSq() === 0) rHat.set(1, 0, 0);
+    rHat.normalize();
+
+    let tHat = previewTangentMeters(nodeM);
+    if (!tHat) {
+      const vessel = sceneBodiesRef.current.find((b) => b.name === maneuverVessel);
+      tHat = vessel
+        ? new THREE.Vector3(vessel.velocity[0], vessel.velocity[1], vessel.velocity[2]).normalize()
+        : new THREE.Vector3(0, 0, 1);
+    }
+    const nHat = new THREE.Vector3().crossVectors(rHat, tHat);
+    if (nHat.lengthSq() === 0) nHat.set(0, 1, 0);
+    nHat.normalize();
+    // Re-orthogonalize prograde so the triad is clean.
+    const tOrtho = new THREE.Vector3().crossVectors(nHat, rHat).normalize();
+
+    return {
+      pos: new THREE.Vector3(toScene(nodeM.x), toScene(nodeM.y), toScene(nodeM.z)),
+      tHat: tOrtho,
+      nHat,
+      rHat,
+    };
+  }, [node, planner, maneuverVessel, cacheEpoch]);
+
+  useFrame(({ camera }) => {
+    const g = groupRef.current;
+    if (!g || !frame) return;
+    const dist = camera.position.distanceTo(frame.pos);
+    g.scale.setScalar(Math.max(dist * SCREEN_SCALE, 1e-4));
   });
 
-  if (!showGizmo || !maneuverVessel || !planner) return null;
+  if (!frame || selectedNodeIndex === null) return null;
 
-  const vessel = sceneBodiesRef.current.find((b) => b.name === maneuverVessel);
-  if (!vessel || !isVessel(vessel)) return null;
-
-  const central = planner.central_body ?? "Sun";
-  const frame = tnwFrameForVessel(sceneBodiesRef.current, vessel.name, central);
-  if (!frame) return null;
-
-  const commitValues = (next: { prograde: number; normal: number; radial: number }) => {
+  const commit = (next: { prograde: number; normal: number; radial: number }) => {
     setDragValues(null);
-    if (selectedNodeIndex !== null) {
-      simDispatch(
-        {
-          cmd: "update_node",
-          index: selectedNodeIndex,
-          prograde: next.prograde,
-          normal: next.normal,
-          radial: next.radial,
-        },
-        { sync: "planner" },
-      );
-    } else {
-      simDispatch(
-        { cmd: "set_draft_dv", prograde: next.prograde, normal: next.normal, radial: next.radial },
-        { sync: "planner" },
-      );
-    }
-  };
-
-  const previewValues = (axis: Axis, value: number) => {
-    setDragValues({
-      prograde: axis === "prograde" ? value : values.prograde,
-      normal: axis === "normal" ? value : values.normal,
-      radial: axis === "radial" ? value : values.radial,
-    });
+    simDispatch(
+      {
+        cmd: "update_node",
+        index: selectedNodeIndex,
+        prograde: next.prograde,
+        normal: next.normal,
+        radial: next.radial,
+      },
+      { sync: "planner" },
+    );
   };
 
   return (
-    <group ref={groupRef}>
+    <group ref={groupRef} position={frame.pos}>
+      {/* Node hub */}
+      <mesh>
+        <sphereGeometry args={[HANDLE_R * 0.7, 12, 12]} />
+        <meshBasicMaterial color={KSP_COLORS.maneuver} toneMapped={false} />
+      </mesh>
       {AXES.map(({ key, color }) => {
-        const val = values[key];
         const dir = (key === "prograde" ? frame.tHat : key === "normal" ? frame.nHat : frame.rHat).clone();
-        const sign = Math.sign(val) || 1;
-        const end = dir.clone().multiplyScalar(GIZMO_ARROW_LEN * sign * (0.5 + Math.min(Math.abs(val) / 2000, 1)));
-        const axisDir = (key === "prograde" ? frame.tHat : key === "normal" ? frame.nHat : frame.rHat)
-          .clone()
-          .normalize();
         return (
-          <group key={key}>
-            <AxisLine end={end} color={color} />
-            <DvDragHandle
-              position={end}
-              color={color}
-              axis={axisDir}
-              value={val}
-              onPreview={(v) => previewValues(key, v)}
-              onCommit={(v) => commitValues({ ...values, [key]: v })}
-            />
-          </group>
+          <AxisGizmo
+            key={key}
+            dir={dir}
+            color={color}
+            origin={frame.pos}
+            value={values[key]}
+            onPreview={(v) =>
+              setDragValues({
+                prograde: key === "prograde" ? v : values.prograde,
+                normal: key === "normal" ? v : values.normal,
+                radial: key === "radial" ? v : values.radial,
+              })
+            }
+            onCommit={(v) => commit({ ...values, [key]: v })}
+          />
         );
       })}
     </group>
   );
 }
 
-function AxisLine({ end, color }: { end: THREE.Vector3; color: string }) {
-  const points = useMemo(
-    () =>
-      [
-        [0, 0, 0],
-        [end.x, end.y, end.z],
-      ] as [number, number, number][],
-    [end.x, end.y, end.z],
-  );
-  return (
-    <Line
-      points={points}
-      color={color}
-      transparent
-      opacity={0.7}
-      depthWrite={false}
-      toneMapped={false}
-    />
-  );
-}
-
-function DvDragHandle({
-  position,
+/** One axis: a bidirectional arm with a + and − drag handle (KSP pro/retro pairs). */
+function AxisGizmo({
+  dir,
   color,
-  axis,
+  origin,
   value,
   onPreview,
   onCommit,
 }: {
-  position: THREE.Vector3;
+  dir: THREE.Vector3;
   color: string;
-  axis: THREE.Vector3;
+  origin: THREE.Vector3;
+  value: number;
+  onPreview: (v: number) => void;
+  onCommit: (v: number) => void;
+}) {
+  const linePoints = useMemo(
+    () =>
+      [
+        [-dir.x, -dir.y, -dir.z],
+        [dir.x, dir.y, dir.z],
+      ] as [number, number, number][],
+    [dir.x, dir.y, dir.z],
+  );
+
+  return (
+    <group>
+      <Line points={linePoints} color={color} transparent opacity={0.65} depthWrite={false} toneMapped={false} />
+      <DragHandle dir={dir} sign={1} color={color} origin={origin} value={value} onPreview={onPreview} onCommit={onCommit} />
+      <DragHandle dir={dir} sign={-1} color={color} origin={origin} value={value} onPreview={onPreview} onCommit={onCommit} />
+    </group>
+  );
+}
+
+function DragHandle({
+  dir,
+  sign,
+  color,
+  origin,
+  value,
+  onPreview,
+  onCommit,
+}: {
+  dir: THREE.Vector3;
+  sign: number;
+  color: string;
+  origin: THREE.Vector3;
   value: number;
   onPreview: (v: number) => void;
   onCommit: (v: number) => void;
 }) {
   const { camera } = useThree();
-  const groupRef = useRef<THREE.Group>(null);
   const dragging = useRef(false);
   const startValue = useRef(value);
-  const currentValue = useRef(value);
-  const [active, setActive] = useState(false);
-  const origin = useRef(new THREE.Vector3());
-
-  useFrame(() => {
-    if (groupRef.current?.parent) {
-      origin.current.copy(groupRef.current.parent.position);
-    }
-  });
+  const current = useRef(value);
+  const [hover, setHover] = useState(false);
+  // Drag along the world axis in the handle's direction (sign folds into delta).
+  const worldAxis = useMemo(() => dir.clone().multiplyScalar(sign), [dir, sign]);
 
   const onDown = (e: ThreeEvent<PointerEvent>) => {
     e.stopPropagation();
     dragging.current = true;
     startValue.current = value;
-    currentValue.current = value;
-    setActive(true);
-    (e.target as HTMLElement).setPointerCapture(e.pointerId);
+    current.current = value;
+    (e.target as Element).setPointerCapture?.(e.pointerId);
   };
-
   const onMove = (e: ThreeEvent<PointerEvent>) => {
     if (!dragging.current) return;
     e.stopPropagation();
-    const delta = axisDragDelta(axis, origin.current, e.movementX, e.movementY, camera, 2.5);
-    const next = startValue.current + delta;
-    currentValue.current = next;
-    onPreview(next);
+    const delta = axisDragDelta(worldAxis, origin, e.movementX, e.movementY, camera, 2.5);
+    current.current = startValue.current + delta;
+    onPreview(current.current);
   };
-
   const onUp = (e: ThreeEvent<PointerEvent>) => {
     if (!dragging.current) return;
     dragging.current = false;
-    setActive(false);
-    (e.target as HTMLElement).releasePointerCapture(e.pointerId);
-    onCommit(currentValue.current);
+    (e.target as Element).releasePointerCapture?.(e.pointerId);
+    onCommit(current.current);
   };
 
   return (
-    <group ref={groupRef} position={position}>
-      <mesh
-        scale={active ? GIZMO_HANDLE_SCALE * 1.25 : GIZMO_HANDLE_SCALE}
-        onPointerDown={onDown}
-        onPointerMove={onMove}
-        onPointerUp={onUp}
-        onPointerOver={() => setActive(true)}
-        onPointerOut={() => !dragging.current && setActive(false)}
-      >
-        <sphereGeometry args={[1, 10, 10]} />
-        <meshBasicMaterial color={color} toneMapped={false} transparent opacity={0.95} />
-      </mesh>
-    </group>
+    <mesh
+      position={[dir.x * sign, dir.y * sign, dir.z * sign]}
+      scale={hover ? HANDLE_R * 1.3 : HANDLE_R}
+      onPointerDown={onDown}
+      onPointerMove={onMove}
+      onPointerUp={onUp}
+      onPointerOver={() => setHover(true)}
+      onPointerOut={() => !dragging.current && setHover(false)}
+    >
+      <sphereGeometry args={[1, 12, 12]} />
+      <meshBasicMaterial color={color} toneMapped={false} transparent opacity={sign > 0 ? 0.95 : 0.5} />
+    </mesh>
   );
 }

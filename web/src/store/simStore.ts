@@ -67,7 +67,9 @@ export const useSimStore = create<SimStore>((set, get) => ({
   scenarioName: "",
   scenarioIndex: 0,
   simTime: 0,
-  paused: false,
+  // Start paused so maneuver planning is calm (KSP map-style): set up nodes,
+  // then unpause / warp to execute them.
+  paused: true,
   speed: 5000,
   bodies: [],
   selectedBody: null,
