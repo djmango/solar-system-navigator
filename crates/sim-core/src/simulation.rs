@@ -639,11 +639,10 @@ impl Simulation {
 
     pub fn compute_hohmann(&mut self) -> Result<HohmannTransfer, String> {
         let snapshots = self.soi_snapshots();
-        let central_name = self
-            .planner
-            .central_body
-            .clone()
-            .ok_or_else(|| "no central body — select a vessel with SOI auto enabled".to_string())?;
+        let central_name =
+            self.planner.central_body.clone().ok_or_else(|| {
+                "no central body — select a vessel with SOI auto enabled".to_string()
+            })?;
         let target_name = self
             .planner
             .target_body
@@ -913,10 +912,12 @@ mod tests {
         let mut sim = Simulation::from_default_scenario().expect("load");
         sim.add_maneuver_node_at_time(sim.sim_time + 1000.0);
         // Move it far ahead.
-        sim.set_maneuver_node_time(0, sim.sim_time + 5.0e6).expect("set");
+        sim.set_maneuver_node_time(0, sim.sim_time + 5.0e6)
+            .expect("set");
         assert!((sim.planner.nodes[0].time - (sim.sim_time + 5.0e6)).abs() < 1.0);
         // A past time is clamped into the future.
-        sim.set_maneuver_node_time(0, sim.sim_time - 100.0).expect("set");
+        sim.set_maneuver_node_time(0, sim.sim_time - 100.0)
+            .expect("set");
         assert!(sim.planner.nodes[0].time > sim.sim_time);
     }
 

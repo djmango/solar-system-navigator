@@ -265,7 +265,9 @@ impl WasmSimulation {
                 Ok(())
             }
             SimCommand::ComputeHohmann => sim.compute_hohmann().map(|_| ()),
-            SimCommand::WarpToNode { index, lead } => sim.warp_to_node(index as usize, lead).map(|_| ()),
+            SimCommand::WarpToNode { index, lead } => {
+                sim.warp_to_node(index as usize, lead).map(|_| ())
+            }
             SimCommand::ApplyHohmannDeparture => {
                 let xfer: HohmannTransfer = sim
                     .planner

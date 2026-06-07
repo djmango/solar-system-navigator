@@ -91,6 +91,20 @@ pub fn build_soi_snapshots_from_states(
         .collect()
 }
 
+pub fn relative_target_state(
+    snapshots: &[SoiBodySnapshot],
+    central_name: &str,
+    target_name: &str,
+) -> Option<RelativeState> {
+    let central = soi::find_body(snapshots, central_name)?;
+    let target = soi::find_body(snapshots, target_name)?;
+    Some(soi::relative_state_to_central(
+        target.position,
+        target.velocity,
+        central,
+    ))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -145,18 +159,4 @@ mod tests {
         assert!(result.warning.is_some());
         assert!(result.transfer.dv_departure.is_finite());
     }
-}
-
-pub fn relative_target_state(
-    snapshots: &[SoiBodySnapshot],
-    central_name: &str,
-    target_name: &str,
-) -> Option<RelativeState> {
-    let central = soi::find_body(snapshots, central_name)?;
-    let target = soi::find_body(snapshots, target_name)?;
-    Some(soi::relative_state_to_central(
-        target.position,
-        target.velocity,
-        central,
-    ))
 }
