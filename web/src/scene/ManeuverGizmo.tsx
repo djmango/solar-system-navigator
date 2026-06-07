@@ -3,6 +3,7 @@ import { useMemo, useRef, useState } from "react";
 import { useFrame, useThree } from "@react-three/fiber";
 import type { ThreeEvent } from "@react-three/fiber";
 import * as THREE from "three";
+import type { OrbitControls as OrbitControlsImpl } from "three-stdlib";
 import { useSimStore } from "@/store/simStore";
 import { toScene } from "@/lib/units";
 import { KSP_COLORS } from "@/lib/ksp";
@@ -80,7 +81,11 @@ function previewTangentMeters(nodeM: THREE.Vector3): THREE.Vector3 | null {
 }
 
 /** KSP-style TNW Δv handles, anchored on the selected node, constant screen size. */
-export function ManeuverGizmo() {
+export function ManeuverGizmo({
+  controlsRef,
+}: {
+  controlsRef: React.RefObject<OrbitControlsImpl | null>;
+}) {
   const groupRef = useRef<THREE.Group>(null);
   const planner = useSimStore((s) => s.planner);
   const selectedNodeIndex = useSimStore((s) => s.selectedNodeIndex);
@@ -188,6 +193,7 @@ export function ManeuverGizmo() {
             dir={dir}
             color={color}
             origin={frame.pos}
+            controlsRef={controlsRef}
             value={values[key]}
             onPreview={(v) =>
               setDragValues({
@@ -209,6 +215,7 @@ function AxisGizmo({
   dir,
   color,
   origin,
+  controlsRef,
   value,
   onPreview,
   onCommit,
@@ -216,6 +223,7 @@ function AxisGizmo({
   dir: THREE.Vector3;
   color: string;
   origin: THREE.Vector3;
+  controlsRef: React.RefObject<OrbitControlsImpl | null>;
   value: number;
   onPreview: (v: number) => void;
   onCommit: (v: number) => void;
@@ -232,8 +240,26 @@ function AxisGizmo({
   return (
     <group>
       <Line points={linePoints} color={color} transparent opacity={0.65} depthWrite={false} toneMapped={false} />
-      <DragHandle dir={dir} sign={1} color={color} origin={origin} value={value} onPreview={onPreview} onCommit={onCommit} />
-      <DragHandle dir={dir} sign={-1} color={color} origin={origin} value={value} onPreview={onPreview} onCommit={onCommit} />
+      <DragHandle
+        dir={dir}
+        sign={1}
+        color={color}
+        origin={origin}
+        controlsRef={controlsRef}
+        value={value}
+        onPreview={onPreview}
+        onCommit={onCommit}
+      />
+      <DragHandle
+        dir={dir}
+        sign={-1}
+        color={color}
+        origin={origin}
+        controlsRef={controlsRef}
+        value={value}
+        onPreview={onPreview}
+        onCommit={onCommit}
+      />
     </group>
   );
 }
@@ -243,6 +269,7 @@ function DragHandle({
   sign,
   color,
   origin,
+  controlsRef,
   value,
   onPreview,
   onCommit,
@@ -251,6 +278,7 @@ function DragHandle({
   sign: number;
   color: string;
   origin: THREE.Vector3;
+  controlsRef: React.RefObject<OrbitControlsImpl | null>;
   value: number;
   onPreview: (v: number) => void;
   onCommit: (v: number) => void;
@@ -267,6 +295,7 @@ function DragHandle({
   const onDown = (e: ThreeEvent<PointerEvent>) => {
     e.stopPropagation();
     dragging.current = true;
+    if (controlsRef.current) controlsRef.current.enabled = false;
     startPointer.current.set(e.clientX, e.clientY);
     startValue.current = value;
     current.current = value;
@@ -289,6 +318,7 @@ function DragHandle({
   const onUp = (e: ThreeEvent<PointerEvent>) => {
     if (!dragging.current) return;
     dragging.current = false;
+    if (controlsRef.current) controlsRef.current.enabled = true;
     (e.target as Element).releasePointerCapture?.(e.pointerId);
     onCommit(current.current);
   };

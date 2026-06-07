@@ -71,7 +71,7 @@ export function SolarScene() {
           <OrbitPaths />
           <ManeuverPreview />
           <ManeuverNodeMarkers />
-          <ManeuverGizmo />
+          <ManeuverGizmo controlsRef={controlsRef} />
         </Suspense>
         <OrbitControls
           ref={controlsRef}
