@@ -15,7 +15,7 @@ rm -rf "$OUT"
 mkdir -p "$OUT"
 cp target/release/solar-system-navigator "$OUT/"
 cp -r assets "$OUT/"
-cp README.md LICENSE-APACHE LICENSE-MIT "$OUT/" 2>/dev/null || true
+cp README.md LICENSE "$OUT/"
 
 echo ""
 echo "Release bundle ready: $OUT"
