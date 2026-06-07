@@ -8,14 +8,13 @@ use crate::components::{
     CelestialBody, FixedBody, Mass as BodyMass, Position, Probe, SoiRadius, TruthOrbit, Velocity,
 };
 use crate::orbit::{self, RelativeState};
-use crate::physics::BodyState;
 use crate::planner::build_soi_snapshots;
 use crate::resources::{
-    ActiveScenario, GameUx, MapViewMode, PhysicsConstants, RoutePlanner, SimulationClock,
+    ActiveScenario, GameUx, ManeuverNode, MapViewMode, PhysicsConstants, PlannerPreview,
+    RoutePlanner, SimulationClock,
 };
 use crate::scenario::BodyDef;
 use crate::soi::SoiBodySnapshot;
-use crate::truth::{TRUTH_INTEGRATION_DT, predict_target_path_nbody};
 
 const MAP_RADIUS: f32 = 3.2 * AU;
 const MAP_PITCH: f32 = std::f32::consts::FRAC_PI_2 - 0.02;
@@ -78,6 +77,7 @@ pub fn draw_orbit_previews(
     clock: Res<SimulationClock>,
     physics: Res<PhysicsConstants>,
     active: Res<ActiveScenario>,
+    preview: Res<PlannerPreview>,
     mut gizmos: Gizmos,
     bodies: Query<(
         &CelestialBody,
@@ -163,32 +163,40 @@ pub fn draw_orbit_previews(
         draw_world_path(&mut gizmos, &truth.points, color);
     }
 
-    if !planner.nodes.is_empty() {
-        let initial = snapshot_states(&bodies);
-        let horizon = planner.preview_horizon.max(50.0);
-        let predicted = predict_target_path_nbody(
-            &initial,
-            &central_name,
-            &target_name,
-            &planner.nodes,
-            clock.time,
-            horizon,
-            planner.preview_step.max(TRUTH_INTEGRATION_DT * 0.25),
-            physics.g,
-            physics.softening,
+    // Planned trajectory (orange) reflects all pending nodes; the coast path is
+    // already drawn above, so this only appears once a node exists.
+    let preview_matches = preview.vessel.as_deref() == Some(target_name.as_str());
+    if !planner.nodes.is_empty() && preview_matches {
+        draw_world_path(
+            &mut gizmos,
+            &preview.path,
+            Color::srgba(1.0, 0.55, 0.15, 0.95),
         );
-        draw_world_path(&mut gizmos, &predicted, Color::srgba(1.0, 0.55, 0.15, 0.95));
+    }
 
-        let step = planner.preview_step.max(TRUTH_INTEGRATION_DT * 0.25);
-        for node in planner
-            .nodes
-            .iter()
-            .filter(|node| !node.executed && node.time >= clock.time)
-        {
-            let time_offset = (node.time - clock.time).max(0.0);
-            if let Some(pos) = position_at_time(&predicted, time_offset, step) {
-                let marker = 5.0e8 + node.delta_v_magnitude() * 2.0e7;
-                gizmos.sphere(pos, marker, Color::srgba(1.0, 0.9, 0.2, 0.95));
+    if preview_matches {
+        let marker_base = central.soi_radius.clamp(4.0e8, 3.0e9);
+        for node in &planner.nodes {
+            if node.executed || node.time < clock.time {
+                continue;
+            }
+            let Some(pos) = preview.position_at_time(node.time) else {
+                continue;
+            };
+            let selected = planner.selected_node == Some(node.id);
+            let marker = if selected {
+                marker_base * 1.6
+            } else {
+                marker_base
+            };
+            let color = if selected {
+                Color::srgba(1.0, 1.0, 0.4, 1.0)
+            } else {
+                Color::srgba(1.0, 0.8, 0.2, 0.85)
+            };
+            gizmos.sphere(pos, marker, color);
+            if selected {
+                draw_node_handles(&mut gizmos, &preview, node, central.position, pos);
             }
         }
     }
@@ -202,28 +210,63 @@ pub fn draw_orbit_previews(
     }
 }
 
-fn snapshot_states(
-    bodies: &Query<(
-        &CelestialBody,
-        &BodyMass,
-        &Position,
-        &Velocity,
-        &SoiRadius,
-        &TruthOrbit,
-        Option<&FixedBody>,
-        Option<&Probe>,
-    )>,
-) -> Vec<BodyState> {
-    bodies
-        .iter()
-        .map(|(c, m, p, v, _, _, fixed, _)| BodyState {
-            name: c.name.clone(),
-            position: p.0,
-            velocity: v.0,
-            mass: m.0,
-            fixed: fixed.is_some(),
-        })
-        .collect()
+/// Draw prograde / normal / radial direction handles at the selected node so the
+/// burn frame is legible in the map view.
+fn draw_node_handles(
+    gizmos: &mut Gizmos,
+    preview: &PlannerPreview,
+    node: &ManeuverNode,
+    central_pos: Vec3,
+    node_pos: Vec3,
+) {
+    let radial = (node_pos - central_pos).normalize_or_zero();
+    if radial == Vec3::ZERO {
+        return;
+    }
+
+    // Prograde from the local tangent of the predicted path.
+    let prograde = if preview.step > 0.0 && preview.path.len() >= 2 {
+        let idx = (((node.time - preview.start_time) / preview.step).round() as usize)
+            .min(preview.path.len() - 1);
+        let next = (idx + 1).min(preview.path.len() - 1);
+        let prev = idx.saturating_sub(1);
+        (preview.path[next] - preview.path[prev]).normalize_or_zero()
+    } else {
+        Vec3::ZERO
+    };
+    let prograde = if prograde == Vec3::ZERO {
+        radial.cross(Vec3::Y).normalize_or_zero()
+    } else {
+        prograde
+    };
+    let normal = prograde.cross(radial).normalize_or_zero();
+
+    let len = ((node_pos - central_pos).length() * 0.3).clamp(2.0e9, 4.0e10);
+    gizmos.line(
+        node_pos,
+        node_pos + prograde * len,
+        Color::srgb(0.3, 1.0, 0.4),
+    );
+    gizmos.line(
+        node_pos,
+        node_pos + normal * len,
+        Color::srgb(0.8, 0.4, 1.0),
+    );
+    gizmos.line(
+        node_pos,
+        node_pos + radial * len,
+        Color::srgb(0.3, 0.8, 1.0),
+    );
+
+    // Resultant Δv direction in that frame.
+    let dv = prograde * node.prograde + normal * node.normal + radial * node.radial;
+    if dv.length_squared() > 1.0 {
+        gizmos.line(
+            node_pos,
+            node_pos + dv.normalize() * len * 1.2,
+            Color::srgb(1.0, 0.9, 0.5),
+        );
+    }
 }
 
 fn draw_nbody_truth_orbits(
@@ -293,12 +336,4 @@ fn draw_path_relative(gizmos: &mut Gizmos, path: &[Vec3], origin: Vec3, color: C
     for window in path.windows(2) {
         gizmos.line(origin + window[0], origin + window[1], color);
     }
-}
-
-fn position_at_time(path: &[Vec3], offset: f32, step: f32) -> Option<Vec3> {
-    if path.is_empty() || step <= 0.0 {
-        return None;
-    }
-    let idx = (offset / step).round() as usize;
-    path.get(idx.min(path.len() - 1)).copied()
 }

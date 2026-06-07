@@ -87,7 +87,8 @@ pub fn update_soi_central_body(
         return;
     };
 
-    let central = soi::dominant_soi_body(vessel_pos.0, &snapshots, primary_name);
+    let central =
+        soi::dominant_soi_body(vessel_pos.0, &snapshots, primary_name, Some(&target_name));
     planner.central_body = Some(central.to_string());
 }
 
@@ -109,21 +110,96 @@ pub fn compute_soi_radius_for_body(
     soi::hill_soi_radius(orbital_radius, def.mass, primary_mass) * scenario.soi_scale
 }
 
-pub fn add_maneuver_node(planner: &mut RoutePlanner, clock: &SimulationClock) {
-    let t = clock.time + planner.default_burn_offset;
-    planner.nodes.push(make_node(
-        t,
-        planner,
-        planner.draft_prograde,
-        planner.draft_normal,
-        planner.draft_radial,
-    ));
+/// Default lead time for a new node placed by hotkey: a fraction of the
+/// vessel's orbital period (falls back to a fixed offset when unknown).
+fn default_lead_time(planner: &RoutePlanner, period: f32) -> f32 {
+    if period.is_finite() && period > 0.0 {
+        period * 0.25
+    } else {
+        planner.default_burn_offset.max(1.0)
+    }
+}
+
+pub fn add_maneuver_node(planner: &mut RoutePlanner, clock: &SimulationClock, period: f32) {
+    let t = clock.time + default_lead_time(planner, period);
+    add_node_at_time(planner, t);
+}
+
+/// Add a fresh zero-Δv node at `time` and make it the selected node.
+pub fn add_node_at_time(planner: &mut RoutePlanner, time: f32) -> u32 {
+    let id = planner.next_node_id;
+    planner.next_node_id = planner.next_node_id.wrapping_add(1).max(1);
+    let node = ManeuverNode {
+        id,
+        time,
+        target_body: planner.target_body.clone(),
+        central_body: planner.central_body.clone(),
+        prograde: 0.0,
+        normal: 0.0,
+        radial: 0.0,
+        executed: false,
+    };
+    planner.nodes.push(node);
     sort_nodes(planner);
+    planner.selected_node = Some(id);
+    planner.sync_sliders = true;
     planner.show_previews = true;
+    id
+}
+
+pub fn select_node(planner: &mut RoutePlanner, id: u32) {
+    if planner.nodes.iter().any(|n| n.id == id) {
+        planner.selected_node = Some(id);
+        planner.sync_sliders = true;
+    }
+}
+
+/// Cycle the selected node by `dir` (+1 next, -1 previous) in time order.
+pub fn cycle_selected_node(planner: &mut RoutePlanner, dir: i32) {
+    if planner.nodes.is_empty() {
+        planner.selected_node = None;
+        return;
+    }
+    let count = planner.nodes.len() as i32;
+    let current = planner.selected_index().map(|i| i as i32);
+    let next = match current {
+        Some(idx) => (idx + dir).rem_euclid(count),
+        None if dir >= 0 => 0,
+        None => count - 1,
+    };
+    planner.selected_node = Some(planner.nodes[next as usize].id);
+    planner.sync_sliders = true;
+}
+
+pub fn delete_selected_node(planner: &mut RoutePlanner) {
+    let Some(idx) = planner.selected_index() else {
+        return;
+    };
+    planner.nodes.remove(idx);
+    planner.selected_node = planner
+        .nodes
+        .get(idx)
+        .or_else(|| planner.nodes.last())
+        .map(|n| n.id);
+    planner.sync_sliders = true;
+    if planner.nodes.is_empty() {
+        planner.show_previews = false;
+    }
+}
+
+/// Nudge the selected node's burn time, keeping nodes time-sorted.
+pub fn nudge_selected_node_time(planner: &mut RoutePlanner, delta: f32) {
+    if let Some(node) = planner.selected_mut() {
+        node.time = (node.time + delta).max(0.0);
+        sort_nodes(planner);
+        planner.sync_sliders = true;
+    }
 }
 
 pub fn clear_maneuver_nodes(planner: &mut RoutePlanner) {
     planner.nodes.clear();
+    planner.selected_node = None;
+    planner.sync_sliders = true;
     // Maneuver prediction path only; system orbit rings use `GameUx::show_system_orbits`.
     planner.show_previews = false;
 }
@@ -162,35 +238,21 @@ pub fn add_hohmann_maneuver_pair(
     planner: &mut RoutePlanner,
     clock: &SimulationClock,
     xfer: &HohmannTransfer,
+    period: f32,
 ) {
-    let t0 = clock.time + planner.default_burn_offset;
+    let t0 = clock.time + default_lead_time(planner, period);
     let t1 = t0 + xfer.transfer_time;
-    planner
-        .nodes
-        .push(make_node(t0, planner, xfer.dv_departure, 0.0, 0.0));
-    planner
-        .nodes
-        .push(make_node(t1, planner, xfer.dv_arrival, 0.0, 0.0));
-    sort_nodes(planner);
-    planner.show_previews = true;
-}
-
-fn make_node(
-    time: f32,
-    planner: &RoutePlanner,
-    prograde: f32,
-    normal: f32,
-    radial: f32,
-) -> ManeuverNode {
-    ManeuverNode {
-        time,
-        target_body: planner.target_body.clone(),
-        central_body: planner.central_body.clone(),
-        prograde,
-        normal,
-        radial,
-        executed: false,
+    let departure = add_node_at_time(planner, t0);
+    let arrival = add_node_at_time(planner, t1);
+    if let Some(node) = planner.nodes.iter_mut().find(|n| n.id == departure) {
+        node.prograde = xfer.dv_departure;
     }
+    if let Some(node) = planner.nodes.iter_mut().find(|n| n.id == arrival) {
+        node.prograde = xfer.dv_arrival;
+    }
+    planner.selected_node = Some(departure);
+    planner.sync_sliders = true;
+    planner.show_previews = true;
 }
 
 fn sort_nodes(planner: &mut RoutePlanner) {
@@ -235,4 +297,70 @@ pub fn relative_target_state(
         target.velocity,
         central,
     ))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn planner_with_target() -> RoutePlanner {
+        RoutePlanner {
+            target_body: Some("Probe".into()),
+            central_body: Some("Sun".into()),
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn add_node_assigns_unique_ids_and_selects() {
+        let mut planner = planner_with_target();
+        let a = add_node_at_time(&mut planner, 100.0);
+        let b = add_node_at_time(&mut planner, 50.0);
+        assert_ne!(a, b);
+        assert_eq!(planner.nodes.len(), 2);
+        // Newest node is selected and nodes are kept time-sorted.
+        assert_eq!(planner.selected_node, Some(b));
+        assert!(planner.nodes[0].time <= planner.nodes[1].time);
+        // Selection survives the re-sort.
+        assert_eq!(planner.selected().map(|n| n.id), Some(b));
+    }
+
+    #[test]
+    fn cycle_and_delete_track_selection() {
+        let mut planner = planner_with_target();
+        let first = add_node_at_time(&mut planner, 10.0);
+        let second = add_node_at_time(&mut planner, 20.0);
+
+        cycle_selected_node(&mut planner, 1);
+        let after_first = planner.selected_node;
+        cycle_selected_node(&mut planner, 1);
+        assert_ne!(planner.selected_node, after_first);
+
+        planner.selected_node = Some(first);
+        delete_selected_node(&mut planner);
+        assert_eq!(planner.nodes.len(), 1);
+        assert_eq!(planner.nodes[0].id, second);
+        assert!(planner.selected_node.is_some());
+    }
+
+    #[test]
+    fn nudge_keeps_nodes_sorted() {
+        let mut planner = planner_with_target();
+        add_node_at_time(&mut planner, 10.0);
+        let late = add_node_at_time(&mut planner, 20.0);
+        planner.selected_node = Some(late);
+        nudge_selected_node_time(&mut planner, -15.0);
+        assert!(planner.nodes[0].time <= planner.nodes[1].time);
+        // Time floored at zero.
+        assert!(planner.nodes.iter().all(|n| n.time >= 0.0));
+    }
+
+    #[test]
+    fn clear_resets_selection() {
+        let mut planner = planner_with_target();
+        add_node_at_time(&mut planner, 10.0);
+        clear_maneuver_nodes(&mut planner);
+        assert!(planner.nodes.is_empty());
+        assert_eq!(planner.selected_node, None);
+    }
 }

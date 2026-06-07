@@ -82,6 +82,8 @@ impl Default for MapViewMode {
 
 #[derive(Debug, Clone)]
 pub struct ManeuverNode {
+    /// Stable identity, used to track selection across re-sorting.
+    pub id: u32,
     /// Universal simulation time for the impulsive burn [s].
     pub time: f32,
     /// Vessel receiving the burn. Falls back to the current planner target for legacy nodes.
@@ -101,9 +103,43 @@ impl ManeuverNode {
     }
 }
 
+/// Time-mapped predicted trajectory of the active vessel, shared by the map
+/// renderer and the click-to-place node interaction. `path[i]` is the world
+/// position at `start_time + i * step`.
+#[derive(Resource, Default, Debug, Clone)]
+pub struct PlannerPreview {
+    pub path: Vec<Vec3>,
+    pub start_time: f32,
+    pub step: f32,
+    pub vessel: Option<String>,
+    pub central: Option<String>,
+    /// Orbital period estimate of the vessel around its central body [s].
+    pub period: f32,
+}
+
+impl PlannerPreview {
+    pub fn position_at_time(&self, time: f32) -> Option<Vec3> {
+        if self.path.is_empty() || self.step <= 0.0 {
+            return None;
+        }
+        let idx = ((time - self.start_time) / self.step).round();
+        if idx < 0.0 {
+            return None;
+        }
+        let idx = (idx as usize).min(self.path.len() - 1);
+        self.path.get(idx).copied()
+    }
+}
+
 #[derive(Resource, Debug, Clone)]
 pub struct RoutePlanner {
     pub nodes: Vec<ManeuverNode>,
+    /// Identity of the node being edited, if any.
+    pub selected_node: Option<u32>,
+    /// Monotonic id source for new nodes.
+    pub next_node_id: u32,
+    /// Set when selection changes so the HUD sliders resync to the node values.
+    pub sync_sliders: bool,
     pub central_body: Option<String>,
     pub target_body: Option<String>,
     pub draft_prograde: f32,
@@ -123,9 +159,12 @@ impl Default for RoutePlanner {
     fn default() -> Self {
         Self {
             nodes: Vec::new(),
+            selected_node: None,
+            next_node_id: 1,
+            sync_sliders: false,
             central_body: None,
             target_body: None,
-            draft_prograde: 500.0,
+            draft_prograde: 0.0,
             draft_normal: 0.0,
             draft_radial: 0.0,
             default_burn_offset: 30.0,
@@ -136,6 +175,22 @@ impl Default for RoutePlanner {
             hohmann_target_radius: crate::astro::AU * 1.524,
             last_hohmann: None,
         }
+    }
+}
+
+impl RoutePlanner {
+    pub fn selected_index(&self) -> Option<usize> {
+        let id = self.selected_node?;
+        self.nodes.iter().position(|n| n.id == id)
+    }
+
+    pub fn selected(&self) -> Option<&ManeuverNode> {
+        self.selected_index().map(|i| &self.nodes[i])
+    }
+
+    pub fn selected_mut(&mut self) -> Option<&mut ManeuverNode> {
+        let idx = self.selected_index()?;
+        self.nodes.get_mut(idx)
     }
 }
 

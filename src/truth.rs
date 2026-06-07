@@ -418,6 +418,7 @@ mod tests {
     fn prograde_node_executes_inside_large_step() {
         let mut state = two_body_state();
         let mut nodes = vec![ManeuverNode {
+            id: 1,
             time: 10.0,
             target_body: Some("Probe".into()),
             central_body: Some("Sun".into()),
@@ -447,6 +448,7 @@ mod tests {
     fn future_node_waits_until_interval_contains_it() {
         let mut state = two_body_state();
         let mut nodes = vec![ManeuverNode {
+            id: 1,
             time: 2000.0,
             target_body: Some("Probe".into()),
             central_body: Some("Sun".into()),

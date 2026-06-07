@@ -7,6 +7,7 @@ mod demo;
 mod input;
 mod interaction;
 mod map_view;
+mod node_edit;
 mod orbit;
 mod physics;
 mod planner;
@@ -27,11 +28,12 @@ use interaction::{
     ClickTracker, body_pick_on_click, focus_primary_hotkey, frame_camera_hotkey, update_body_hover,
 };
 use map_view::{draw_orbit_previews, map_mode_camera, toggle_map_mode};
+use node_edit::{map_drag_accumulator, node_pick, update_planner_preview};
 use physics::orbital_physics;
 use planner::{sync_route_planner_targets, update_soi_central_body};
 use resources::{
     ActiveScenario, BodyTextureCache, CameraInputState, DemoRecorder, GameUx, HoveredBody,
-    MapViewMode, PendingTruthPaths, PhysicsConstants, ReloadScenario, RoutePlanner,
+    MapViewMode, PendingTruthPaths, PhysicsConstants, PlannerPreview, ReloadScenario, RoutePlanner,
     ScenarioCatalog, SimulationClock, SimulationControl, SimulationDiagnostics, SpawnProbe,
 };
 use scenario::Scenario;
@@ -66,6 +68,7 @@ pub fn run_app(template: Scenario) {
     .init_resource::<SimulationClock>()
     .init_resource::<RoutePlanner>()
     .init_resource::<MapViewMode>()
+    .init_resource::<PlannerPreview>()
     .init_resource::<GameUx>()
     .init_resource::<CameraInputState>()
     .init_resource::<ClickTracker>()
@@ -120,6 +123,7 @@ pub fn run_app(template: Scenario) {
                 sync_editor_from_selection,
                 apply_editor_velocity,
                 orbital_physics,
+                update_planner_preview,
                 update_selection_visuals,
                 draw_orbit_trails,
                 draw_orbit_previews,
@@ -127,9 +131,11 @@ pub fn run_app(template: Scenario) {
                 .chain(),
         )
         .add_systems(Update, (toggle_map_mode, map_mode_camera))
+        .add_systems(Update, (map_drag_accumulator, node_pick).chain())
         .add_systems(
             Update,
             (
+                ui::sync_planner_sliders,
                 ui_system,
                 update_hud_text,
                 keyboard_controls,

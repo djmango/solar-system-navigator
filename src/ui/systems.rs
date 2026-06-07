@@ -143,9 +143,9 @@ pub fn spawn_ui(mut commands: Commands) {
             .with_children(|row| {
                 spawn_slider(
                     row,
-                    "Δv prograde: 500",
+                    "Δv prograde: 0",
                     SliderType::BurnPrograde,
-                    500.0,
+                    0.0,
                     -5000.0,
                     5000.0,
                     90.0,
@@ -170,12 +170,12 @@ pub fn spawn_ui(mut commands: Commands) {
                 );
                 spawn_slider(
                     row,
-                    "Burn in: 30s",
+                    "Node lead: 0d",
                     SliderType::BurnTimeOffset,
-                    30.0,
-                    1.0,
-                    180.0,
-                    80.0,
+                    0.0,
+                    0.0,
+                    760.0,
+                    0.0,
                 );
                 spawn_slider(
                     row,
@@ -191,7 +191,9 @@ pub fn spawn_ui(mut commands: Commands) {
 }
 
 fn help_lines() -> String {
-    "LMB: orbit | RMB/MMB: pan | Click: select | Dbl-click/F: frame | Home: primary | G: toggle follow | Tab: cycle | Space: pause | Sim time slider (paused): planner clock | M: map | Esc: exit map | V: orbits | P: probe | B/C: burns | 1-3: missions".to_string()
+    "Flight: LMB orbit · RMB/MMB pan · click select · dbl-click/F frame · Home primary · G follow · Tab cycle · Space pause · M map\n\
+     Map planning: click orbit to add node · click node to select · [ ] cycle · X/Del delete · , . slide time · C clear · sliders edit Δv & lead · H/Shift+H Hohmann · O SOI auto"
+        .to_string()
 }
 
 fn spawn_slider(
@@ -304,11 +306,16 @@ pub fn update_hud_text(
                 .iter()
                 .enumerate()
                 .map(|(i, n)| {
-                    let vessel = n.target_body.as_deref().unwrap_or(target);
                     let frame = n.central_body.as_deref().unwrap_or(central);
+                    let lead_d = (n.time - clock.time) / astro::DAY;
+                    let sel = if planner.selected_node == Some(n.id) {
+                        ">"
+                    } else {
+                        " "
+                    };
                     format!(
-                        "#{i} {vessel}/{frame} t={:.0}s Δv=({:.2},{:.2},{:.2}){}",
-                        n.time,
+                        "{sel}#{i} {frame} lead={lead_d:.1}d Δv={:.0} ({:.0},{:.0},{:.0}){}",
+                        n.delta_v_magnitude(),
                         n.prograde,
                         n.normal,
                         n.radial,
@@ -316,7 +323,7 @@ pub fn update_hud_text(
                     )
                 })
                 .collect::<Vec<_>>()
-                .join(" | ")
+                .join("  ")
         };
         let hohmann = planner
             .last_hohmann
@@ -469,10 +476,32 @@ pub fn ui_system(
                 editor.velocity_z = value;
                 editor.velocity_dirty = true;
             }
-            SliderType::BurnPrograde => planner.draft_prograde = value,
-            SliderType::BurnNormal => planner.draft_normal = value,
-            SliderType::BurnRadial => planner.draft_radial = value,
-            SliderType::BurnTimeOffset => planner.default_burn_offset = value,
+            SliderType::BurnPrograde => {
+                planner.draft_prograde = value;
+                if let Some(node) = planner.selected_mut() {
+                    node.prograde = value;
+                }
+            }
+            SliderType::BurnNormal => {
+                planner.draft_normal = value;
+                if let Some(node) = planner.selected_mut() {
+                    node.normal = value;
+                }
+            }
+            SliderType::BurnRadial => {
+                planner.draft_radial = value;
+                if let Some(node) = planner.selected_mut() {
+                    node.radial = value;
+                }
+            }
+            SliderType::BurnTimeOffset => {
+                planner.default_burn_offset = value * astro::DAY;
+                let target_time = clock.time + value * astro::DAY;
+                if let Some(node) = planner.selected_mut() {
+                    node.time = target_time;
+                    planner.nodes.sort_by(|a, b| a.time.total_cmp(&b.time));
+                }
+            }
             SliderType::HohmannTargetRadius => planner.hohmann_target_radius = value,
             SliderType::SimTime => {
                 if simulation_control.paused {
@@ -489,10 +518,10 @@ pub fn ui_system(
                     SliderType::VelX => format!("Vel X: {value:.1}"),
                     SliderType::VelY => format!("Vel Y: {value:.1}"),
                     SliderType::VelZ => format!("Vel Z: {value:.1}"),
-                    SliderType::BurnPrograde => format!("Δv prograde: {value:.2}"),
-                    SliderType::BurnNormal => format!("Δv normal: {value:.2}"),
-                    SliderType::BurnRadial => format!("Δv radial: {value:.2}"),
-                    SliderType::BurnTimeOffset => format!("Burn in: {value:.0}s"),
+                    SliderType::BurnPrograde => format!("Δv prograde: {value:.1}"),
+                    SliderType::BurnNormal => format!("Δv normal: {value:.1}"),
+                    SliderType::BurnRadial => format!("Δv radial: {value:.1}"),
+                    SliderType::BurnTimeOffset => format!("Node lead: {value:.1}d"),
                     SliderType::HohmannTargetRadius => {
                         format!("Hohmann r: {:.3} AU", value / AU)
                     }
@@ -500,5 +529,55 @@ pub fn ui_system(
                 };
             }
         }
+    }
+}
+
+/// Push the selected maneuver node's values into the planner sliders when the
+/// selection changes, so the handles and labels reflect the node being edited.
+pub fn sync_planner_sliders(
+    mut planner: ResMut<RoutePlanner>,
+    clock: Res<SimulationClock>,
+    mut sliders: Query<(&SliderType, &mut Slider)>,
+    mut value_texts: Query<(&mut Text, &SliderType), With<ValueText>>,
+) {
+    if !planner.sync_sliders {
+        return;
+    }
+    planner.sync_sliders = false;
+
+    let (prograde, normal, radial, lead_days) = match planner.selected() {
+        Some(node) => (
+            node.prograde,
+            node.normal,
+            node.radial,
+            ((node.time - clock.time) / astro::DAY).max(0.0),
+        ),
+        None => (
+            planner.draft_prograde,
+            planner.draft_normal,
+            planner.draft_radial,
+            0.0,
+        ),
+    };
+
+    for (slider_type, mut slider) in &mut sliders {
+        let v = match slider_type {
+            SliderType::BurnPrograde => prograde,
+            SliderType::BurnNormal => normal,
+            SliderType::BurnRadial => radial,
+            SliderType::BurnTimeOffset => lead_days,
+            _ => continue,
+        };
+        slider.value = v.clamp(slider.min, slider.max);
+    }
+
+    for (mut text, slider_type) in &mut value_texts {
+        **text = match slider_type {
+            SliderType::BurnPrograde => format!("Δv prograde: {prograde:.1}"),
+            SliderType::BurnNormal => format!("Δv normal: {normal:.1}"),
+            SliderType::BurnRadial => format!("Δv radial: {radial:.1}"),
+            SliderType::BurnTimeOffset => format!("Node lead: {lead_days:.1}d"),
+            _ => continue,
+        };
     }
 }

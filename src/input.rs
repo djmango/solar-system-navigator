@@ -4,11 +4,12 @@ use crate::camera::select_body;
 use crate::components::{CelestialBody, Mass, Position, SoiRadius, Velocity};
 use crate::planner::{
     add_hohmann_maneuver_pair, add_maneuver_node, apply_hohmann_departure_draft,
-    build_soi_snapshots, clear_maneuver_nodes, compute_hohmann_for_target, on_simulation_reset,
+    build_soi_snapshots, clear_maneuver_nodes, compute_hohmann_for_target, cycle_selected_node,
+    delete_selected_node, nudge_selected_node_time, on_simulation_reset,
 };
 use crate::resources::{
-    ActiveScenario, EditorState, GameUx, MapViewMode, PhysicsConstants, ReloadScenario,
-    RoutePlanner, ScenarioCatalog, SimulationClock, SimulationControl, SpawnProbe,
+    ActiveScenario, EditorState, GameUx, MapViewMode, PhysicsConstants, PlannerPreview,
+    ReloadScenario, RoutePlanner, ScenarioCatalog, SimulationClock, SimulationControl, SpawnProbe,
 };
 
 pub fn keyboard_controls(
@@ -25,6 +26,7 @@ pub fn keyboard_controls(
     bodies: Query<(&CelestialBody, &Velocity)>,
     mut spawn_probe_events: MessageWriter<SpawnProbe>,
     physics: Res<PhysicsConstants>,
+    preview: Res<PlannerPreview>,
     soi_bodies: Query<(
         &CelestialBody,
         &Mass,
@@ -47,10 +49,19 @@ pub fn keyboard_controls(
         reload.write(ReloadScenario);
     }
     if keyboard.just_pressed(KeyCode::KeyB) {
-        add_maneuver_node(&mut planner, &clock);
+        add_maneuver_node(&mut planner, &clock, preview.period);
     }
     if keyboard.just_pressed(KeyCode::KeyC) {
         clear_maneuver_nodes(&mut planner);
+    }
+    if keyboard.just_pressed(KeyCode::Delete) || keyboard.just_pressed(KeyCode::KeyX) {
+        delete_selected_node(&mut planner);
+    }
+    if keyboard.just_pressed(KeyCode::BracketLeft) {
+        cycle_selected_node(&mut planner, -1);
+    }
+    if keyboard.just_pressed(KeyCode::BracketRight) {
+        cycle_selected_node(&mut planner, 1);
     }
     if keyboard.just_pressed(KeyCode::KeyV) {
         let on = !game_ux.show_system_orbits;
@@ -67,7 +78,7 @@ pub fn keyboard_controls(
         let snapshots = build_soi_snapshots(&soi_bodies);
         if let Some(xfer) = compute_hohmann_for_target(&mut planner, physics.g, &snapshots) {
             if keyboard.pressed(KeyCode::ShiftLeft) || keyboard.pressed(KeyCode::ShiftRight) {
-                add_hohmann_maneuver_pair(&mut planner, &clock, &xfer);
+                add_hohmann_maneuver_pair(&mut planner, &clock, &xfer, preview.period);
             } else {
                 apply_hohmann_departure_draft(&mut planner, &xfer);
             }
@@ -81,11 +92,13 @@ pub fn keyboard_controls(
             map_mode.yaw += 0.02;
         }
     }
+    // Slide the selected node earlier / later along its orbit.
+    let node_nudge = (preview.period * 0.01).max(preview.step.max(60.0));
     if keyboard.just_pressed(KeyCode::Comma) {
-        planner.default_burn_offset = (planner.default_burn_offset - 5.0).max(1.0);
+        nudge_selected_node_time(&mut planner, -node_nudge);
     }
     if keyboard.just_pressed(KeyCode::Period) {
-        planner.default_burn_offset += 5.0;
+        nudge_selected_node_time(&mut planner, node_nudge);
     }
     if keyboard.just_pressed(KeyCode::Equal) || keyboard.just_pressed(KeyCode::NumpadAdd) {
         simulation.speed = (simulation.speed * 1.25).min(1.0e6);
@@ -107,12 +120,6 @@ pub fn keyboard_controls(
     }
     if keyboard.just_pressed(KeyCode::KeyP) {
         spawn_probe_events.write(SpawnProbe);
-    }
-    if keyboard.just_pressed(KeyCode::BracketLeft) {
-        editor.probe_delta_v -= 50.0;
-    }
-    if keyboard.just_pressed(KeyCode::BracketRight) {
-        editor.probe_delta_v += 50.0;
     }
 
     cycle_selection(&keyboard, &mut editor, &bodies);

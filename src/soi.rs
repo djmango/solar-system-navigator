@@ -21,15 +21,19 @@ pub struct SoiBodySnapshot {
 }
 
 /// Pick the innermost SOI that contains the vessel (smallest distance / SOI ratio).
+///
+/// `exclude` skips a body (typically the active vessel itself) so a selected
+/// planet resolves to its parent SOI rather than its own.
 pub fn dominant_soi_body<'a>(
     vessel_position: Vec3,
     bodies: &'a [SoiBodySnapshot],
     primary_name: &'a str,
+    exclude: Option<&str>,
 ) -> &'a str {
     let mut best: Option<(&'a str, f32)> = None;
 
     for body in bodies {
-        if body.is_primary {
+        if body.is_primary || exclude == Some(body.name.as_str()) {
             continue;
         }
         let offset = vessel_position - body.position;
@@ -91,13 +95,24 @@ mod tests {
     fn vessel_near_earth_uses_earth_soi() {
         let bodies = vec![sun(), earth()];
         let vessel = Vec3::new(305.0, 0.0, 0.0);
-        assert_eq!(dominant_soi_body(vessel, &bodies, "Sun"), "Earth");
+        assert_eq!(dominant_soi_body(vessel, &bodies, "Sun", None), "Earth");
     }
 
     #[test]
     fn vessel_far_from_planets_uses_sun() {
         let bodies = vec![sun(), earth()];
         let vessel = Vec3::new(2000.0, 0.0, 0.0);
-        assert_eq!(dominant_soi_body(vessel, &bodies, "Sun"), "Sun");
+        assert_eq!(dominant_soi_body(vessel, &bodies, "Sun", None), "Sun");
+    }
+
+    #[test]
+    fn selected_planet_resolves_to_parent_soi() {
+        // A vessel sitting on Earth resolves to the Sun once Earth is excluded.
+        let bodies = vec![sun(), earth()];
+        let vessel = earth().position;
+        assert_eq!(
+            dominant_soi_body(vessel, &bodies, "Sun", Some("Earth")),
+            "Sun"
+        );
     }
 }
