@@ -1,5 +1,5 @@
 import { Line } from "@react-three/drei";
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useFrame, useThree } from "@react-three/fiber";
 import type { ThreeEvent } from "@react-three/fiber";
 import * as THREE from "three";
@@ -30,6 +30,9 @@ const AXES: { key: Axis; color: string }[] = [
 const SCREEN_SCALE = 0.07;
 const HANDLE_R = 0.16;
 const HANDLE_HIT_R = 0.34;
+const HANDLE_PULL_DV = 350;
+const MAX_HANDLE_PULL = 2.75;
+const LIVE_PREVIEW_INTERVAL_MS = 90;
 
 interface NodeFrame {
   pos: THREE.Vector3; // scene-space node position
@@ -91,6 +94,7 @@ export function ManeuverGizmo({
   const selectedNodeIndex = useSimStore((s) => s.selectedNodeIndex);
   const maneuverVessel = useSimStore((s) => s.maneuverVessel);
   const cacheEpoch = useSimStore((s) => s.sceneCacheEpoch);
+  const lastPreviewDispatch = useRef(0);
   const [dragValues, setDragValues] = useState<{
     prograde: number;
     normal: number;
@@ -178,6 +182,22 @@ export function ManeuverGizmo({
     );
   };
 
+  const livePreview = (next: { prograde: number; normal: number; radial: number }) => {
+    const now = performance.now();
+    if (now - lastPreviewDispatch.current < LIVE_PREVIEW_INTERVAL_MS) return;
+    lastPreviewDispatch.current = now;
+    simDispatch(
+      {
+        cmd: "update_node",
+        index: selectedNodeIndex,
+        prograde: next.prograde,
+        normal: next.normal,
+        radial: next.radial,
+      },
+      { sync: "planner" },
+    );
+  };
+
   return (
     <group ref={groupRef} position={frame.pos}>
       {/* Node hub */}
@@ -195,13 +215,15 @@ export function ManeuverGizmo({
             origin={frame.pos}
             controlsRef={controlsRef}
             value={values[key]}
-            onPreview={(v) =>
-              setDragValues({
+            onPreview={(v) => {
+              const next = {
                 prograde: key === "prograde" ? v : values.prograde,
                 normal: key === "normal" ? v : values.normal,
                 radial: key === "radial" ? v : values.radial,
-              })
-            }
+              };
+              setDragValues(next);
+              livePreview(next);
+            }}
             onCommit={(v) => commit({ ...values, [key]: v })}
           />
         );
@@ -228,13 +250,16 @@ function AxisGizmo({
   onPreview: (v: number) => void;
   onCommit: (v: number) => void;
 }) {
+  const pull = Math.min(Math.abs(value) / HANDLE_PULL_DV, MAX_HANDLE_PULL);
+  const positiveExtent = value > 0 ? 1 + pull : 1;
+  const negativeExtent = value < 0 ? 1 + pull : 1;
   const linePoints = useMemo(
     () =>
       [
-        [-dir.x, -dir.y, -dir.z],
-        [dir.x, dir.y, dir.z],
+        [-dir.x * negativeExtent, -dir.y * negativeExtent, -dir.z * negativeExtent],
+        [dir.x * positiveExtent, dir.y * positiveExtent, dir.z * positiveExtent],
       ] as [number, number, number][],
-    [dir.x, dir.y, dir.z],
+    [dir.x, dir.y, dir.z, negativeExtent, positiveExtent],
   );
 
   return (
@@ -246,6 +271,7 @@ function AxisGizmo({
         color={color}
         origin={origin}
         controlsRef={controlsRef}
+        extent={positiveExtent}
         value={value}
         onPreview={onPreview}
         onCommit={onCommit}
@@ -256,6 +282,7 @@ function AxisGizmo({
         color={color}
         origin={origin}
         controlsRef={controlsRef}
+        extent={negativeExtent}
         value={value}
         onPreview={onPreview}
         onCommit={onCommit}
@@ -270,6 +297,7 @@ function DragHandle({
   color,
   origin,
   controlsRef,
+  extent,
   value,
   onPreview,
   onCommit,
@@ -279,6 +307,7 @@ function DragHandle({
   color: string;
   origin: THREE.Vector3;
   controlsRef: React.RefObject<OrbitControlsImpl | null>;
+  extent: number;
   value: number;
   onPreview: (v: number) => void;
   onCommit: (v: number) => void;
@@ -291,6 +320,13 @@ function DragHandle({
   const [hover, setHover] = useState(false);
   // Drag along the world axis in the handle's direction (sign folds into delta).
   const worldAxis = useMemo(() => dir.clone().multiplyScalar(sign), [dir, sign]);
+
+  useEffect(
+    () => () => {
+      if (dragging.current && controlsRef.current) controlsRef.current.enabled = true;
+    },
+    [controlsRef],
+  );
 
   const onDown = (e: ThreeEvent<PointerEvent>) => {
     e.stopPropagation();
@@ -324,7 +360,7 @@ function DragHandle({
   };
 
   return (
-    <group position={[dir.x * sign, dir.y * sign, dir.z * sign]}>
+    <group position={[dir.x * sign * extent, dir.y * sign * extent, dir.z * sign * extent]}>
       <mesh
         scale={HANDLE_HIT_R}
         onPointerDown={onDown}
